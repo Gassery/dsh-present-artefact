@@ -18,7 +18,7 @@ sandbox and can be reopened after a reload. File artefacts are only read.
 ## Install
 
 ```bash
-dsh plugin install github:Gassery/dsh-tool-present-plan --profile <profile>
+dsh plugin install github:Gassery/dsh-present-artefact --profile <profile>
 ```
 
 ## Tool contract

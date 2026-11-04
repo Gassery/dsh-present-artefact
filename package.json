@@ -29,9 +29,9 @@
   "author": "Gassery",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Gassery/dsh-tool-present-plan.git"
+    "url": "git+https://github.com/Gassery/dsh-present-artefact.git"
   },
-  "homepage": "https://github.com/Gassery/dsh-tool-present-plan#readme",
+  "homepage": "https://github.com/Gassery/dsh-present-artefact#readme",
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
