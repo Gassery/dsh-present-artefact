@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Present Plan",
-    "description": "Adds a present_plan tool that puts a plan in the plan-review card and waits for the user's approval, in any mode and without changing plan mode."
+    "title": "Present Artefact",
+    "description": "Adds a present_artefact tool that shows one produced artefact in a review card (summary plus full text) and waits for the user's approval or change request. Inline content is never written to disk, so it works under a read-only sandbox."
   }
 }

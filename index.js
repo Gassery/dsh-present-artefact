@@ -1,129 +1,123 @@
 /**
- * `present_plan`: show a plan with the plan-review card that plan mode's
- * `exit_plan_mode` uses, without requiring plan mode.
+ * `present_artefact`: one review gate for any produced artefact.
  *
- * The card is not a dedicated tool UI. It is the user-questions channel's
- * `plan-review` presentation intent, and the question's `detail` field carries
- * the plan document: the Client renders its heading and first paragraph as the
- * card summary and opens the full markdown beside the conversation.
+ * The tool hands the user a single artefact — an inline body (plan, document,
+ * code, diff, table) or a file on disk — and blocks until the user answers
+ * from the card. The card is the Client half of this package: it reads the
+ * call's arguments from the conversation, so the body travels in the tool call
+ * and the session log. Nothing is written to disk, which is what lets the
+ * review work under a read-only sandbox.
  *
- * The intent deliberately omits `callId`. That field points the preview at a
- * logged `exit_plan_mode` invocation, whose arguments the Client can replay;
- * this tool's review is rendered from the question's own `detail` instead, so
- * it works for any tool name and leaves no resolver to keep in sync.
+ * The answer comes back over one authenticated Fetch route below `/api`,
+ * keyed by the tool call identity. The route resolves the deferred that
+ * `execute` is awaiting.
  *
- * Copy ownership: this tool contributes the plan document — written in the
- * user's own language — and machine values. Every piece of card chrome
- * ("同意执行"/"Approve", "要求修改"/"Request changes", "计划待审"/"Plan
- * review", the full-plan link) is drawn by the shipped Client plugins from
- * their own locale dictionaries. So this tool never guesses the UI language,
- * and adds no chrome-like string of its own: no option tooltip, no result-card
- * title.
+ * File artefacts are only read. The Client opens them through the shipped
+ * `dsh-resource://file/…` preview, which already renders pdf, Office, Excel,
+ * images, code and plain text by extension.
  *
- * The definition is written against the raw `ToolDefinition` contract instead
- * of importing `defineTool`, so the package has no runtime import of another
- * Harness package: a bundle linked into a profile from outside its
- * `node_modules` must not depend on the loader's package-routing generation for
- * its own imports.
- *
- * @module @local/dsh-tool-present-plan
+ * @module dsh-present-artefact
  */
 
-/** The model-facing tool name. */
-const TOOL_NAME = 'present_plan';
-/** The review question's id, echoed in the answer this tool reads. */
-const REVIEW_ID = 'plan-review';
-/**
- * The approve option's answer value, shared with the intent. The plan-review
- * card never displays it: the Client prints its own localized `plan.approve`
- * label and echoes this value back as the chosen answer, so it is a machine
- * value rather than user copy. It matches the label plan mode's
- * `exit_plan_mode` uses.
- */
-const APPROVE_LABEL = 'Approve';
-/** Answer code the user-questions channel rejects with when the user leaves the review. */
-const CANCELLED = 'ASK_CANCELLED';
+/** The model-facing tool name, and the Client tool-view key. */
+const TOOL_NAME = 'present_artefact';
+/** The answer route below `/api`; routes register the full shared-channel path. */
+const ANSWER_ROUTE = '/api/present-artefact/answer';
 
-const DESCRIPTION = 'Present a plan for the user to review and approve, then wait for their decision. Works in any mode and does not change plan mode. Approval means carry out the plan from your next step. If the user leaves the review to reply in their own words, the turn ends unapproved. While plan mode is active, prefer exit_plan_mode: it shows the same review and also leaves plan mode.';
+/** Decisions as machine values; the card renders its own localized labels. */
+const AGREE = 'agree';
+const REVISE = 'revise';
 
-const PLAN_PARAMETER = 'The complete plan as markdown, starting with a `# ` heading that names it. The heading and first paragraph are the card summary; the whole document opens for reading beside the conversation. Make it decision-complete: goal, changes grouped by area, tests, risks, and open assumptions.';
+const DESCRIPTION = 'Show one produced artefact to the user for review: a plan, document, code, diff, table, image, or Office file. The user approves it or asks for changes. Works in any mode and needs no write access: inline content travels in this call, and a file is only read. Approval means carry on with your next step; a change request ends the turn so the user can say what to change.';
 
-/** The open parameter object the model fills. */
 const PARAMETERS = {
 	type: 'object',
 	properties: {
-		plan: {
+		title: {
 			type: 'string',
-			description: PLAN_PARAMETER,
+			description: 'Short name of the artefact, shown as the card heading.',
+		},
+		summary: {
+			type: 'string',
+			description: 'One or two sentences the card shows under the heading. Omit to use the body\'s first paragraph.',
+		},
+		body: {
+			type: 'string',
+			description: 'The artefact itself as markdown text. Use this for anything you produced inline; never write a file just to show it.',
+		},
+		path: {
+			type: 'string',
+			description: 'Path of an existing regular file to review. Relative paths use the session working directory. The tool only reads it.',
 		},
 	},
-	required: ['plan'],
+	required: ['title'],
 };
 
-/** The canonical result; `approved` is the only fact every outcome carries. */
 const OUTPUT_SCHEMA = {
 	type: 'object',
 	additionalProperties: false,
 	properties: {
-		approved: {
-			type: 'boolean',
-			description: 'Whether the user approved the plan.',
+		decision: {
+			type: 'string',
+			enum: [AGREE, REVISE],
+			description: 'Whether the user approved the artefact or asked for changes.',
 		},
 		feedback: {
 			type: 'string',
-			description: 'The change the user asked for instead of approving; omitted when they gave none.',
+			description: 'The change the user asked for, when they typed one.',
 		},
 	},
-	required: ['approved'],
+	required: ['decision'],
 };
 
 /**
- * Read the plan's first markdown heading, for the transcript card title.
- *
- * @param plan - The plan markdown.
- * @returns The heading text, or undefined when the plan has none.
- */
-function firstHeading(plan) {
-	for (const line of plan.split('\n')) {
-		const match = /^#{1,6}\s+(.+?)\s*$/.exec(line);
-		if (match !== null) return match[1];
-	}
-	return undefined;
-}
-
-/**
- * State one outcome to the model without repeating the card the user saw.
+ * State one outcome to the model.
  *
  * @param value - The validated canonical result.
  * @returns The model-facing result text.
  */
 function outcomeText(value) {
-	if (value.approved === true) return 'Plan approved. Carry it out starting with your next step.';
-	if (typeof value.feedback === 'string' && value.feedback !== '') return `Plan not approved. The user asked for changes: ${value.feedback}`;
-	return 'Plan not approved. The user left the review to reply in their own words; wait for their message before changing the plan.';
+	if (value.decision === AGREE) return 'The user approved this artefact. Carry on from your next step.';
+	return 'The user asked for changes to this artefact. The turn ends here; read their next message before revising it.';
 }
 
-/**
- * Tell whether a rejection is the user leaving the review for the composer.
- *
- * @param cause - Whatever the ask rejected with; the wire rebuilds this error
- *   in the running Host, so the code is matched structurally.
- * @returns True for that one code.
- */
-function isCancelled(cause) {
-	return typeof cause === 'object' && cause !== null && cause.code === CANCELLED;
-}
-
-/** The tool registry this plugin registers into. */
-export const inject = ['tools'];
+/** The services this plugin needs before it can mount. */
+export const inject = ['tools', 'connection'];
 
 /**
- * Register the global `present_plan` tool.
+ * Register the tool and its answer route.
  *
  * @param ctx - Plugin context.
  */
 export function apply(ctx) {
-	const tool = {
+	/** Pending reviews by tool call identity. */
+	const pending = new Map();
+
+	ctx.effect(() => ctx.connection.fetch.register({
+		path: ANSWER_ROUTE,
+		methods: ['POST'],
+		requestBody: 'buffered',
+		fetch: async (request) => {
+			let body;
+			try {
+				body = await request.json();
+			} catch {
+				return Response.json({ ok: false, error: 'invalid-json' }, { status: 400 });
+			}
+			const callId = body?.callId;
+			const decision = body?.decision;
+			if (typeof callId !== 'string' || callId === '') return Response.json({ ok: false, error: 'missing-call' }, { status: 400 });
+			if (decision !== AGREE && decision !== REVISE) return Response.json({ ok: false, error: 'invalid-decision' }, { status: 400 });
+			const entry = pending.get(callId);
+			if (entry === undefined) return Response.json({ ok: false, error: 'not-pending' }, { status: 409 });
+			pending.delete(callId);
+			const feedback = typeof body?.feedback === 'string' && body.feedback.trim() !== '' ? body.feedback.trim() : undefined;
+			entry.resolve(feedback === undefined ? { decision } : { decision, feedback });
+			return Response.json({ ok: true });
+		},
+	}, 'present-artefact: answer route'));
+
+	ctx.tools.register({
 		name: TOOL_NAME,
 		description: DESCRIPTION,
 		parameters: PARAMETERS,
@@ -132,55 +126,46 @@ export function apply(ctx) {
 			render: (_args, value) => [{ type: 'text', text: outcomeText(value) }],
 		},
 		async execute(args, exec) {
-			const plan = typeof args?.plan === 'string' ? args.plan.trim() : '';
-			if (!/^#\s+\S/.test(plan)) throw new Error(`${TOOL_NAME} needs a markdown plan that starts with a "# " heading naming it`);
 			const agent = exec.agent;
-			if (agent === undefined) throw new Error(`${TOOL_NAME} needs a calling agent whose session can show the plan`);
-			const interaction = ctx.get('userQuestions');
-			if (interaction === undefined) throw new Error('no user-question channel is available to show the plan; ask the user in a message instead');
-			let answer;
-			try {
-				answer = await interaction.ask({
-					questions: [{
-						id: REVIEW_ID,
-						header: 'Plan review',
-						question: 'Approve this plan and carry it out?',
-						detail: plan,
-						options: [{
-							label: APPROVE_LABEL,
-						}],
-						intent: {
-							kind: 'plan-review',
-							approve: APPROVE_LABEL,
-						},
-					}],
-					agent,
-					signal: exec.signal,
-				});
-			} catch (cause) {
-				if (isCancelled(cause)) {
-					exec.concludeTurn();
-					return { approved: false };
+			if (agent === undefined) throw new Error(`${TOOL_NAME} needs a calling agent whose session can show the artefact`);
+			const title = typeof args?.title === 'string' ? args.title.trim() : '';
+			if (title === '') throw new Error(`${TOOL_NAME} needs a non-empty title`);
+			const hasBody = typeof args.body === 'string' && args.body.trim() !== '';
+			const hasPath = typeof args.path === 'string' && args.path.trim() !== '';
+			if (hasBody === hasPath) throw new Error(`${TOOL_NAME} needs exactly one of \`body\` (inline text) or \`path\` (existing file)`);
+
+			if (hasPath) {
+				const fs = ctx.get('fs');
+				const workingDirectory = ctx.get('workingDirectory');
+				if (fs === undefined || workingDirectory === undefined) throw new Error(`${TOOL_NAME} cannot read files in this composition`);
+				const cwd = await workingDirectory.ensure(agent, exec.signal);
+				const target = await fs.resolve(args.path, { cwd, signal: exec.signal });
+				const info = await fs.stat(target, exec.signal);
+				if (info === undefined || info.type !== 'file') throw new Error(`${TOOL_NAME}: ${args.path} is not an existing regular file`);
+			}
+
+			let settle;
+			const settled = new Promise((resolve) => {
+				settle = resolve;
+			});
+			pending.set(exec.callId, { resolve: settle });
+
+			const aborted = new Promise((_resolve, reject) => {
+				if (exec.signal.aborted) {
+					reject(new Error(`${TOOL_NAME} was cancelled`));
+					return;
 				}
-				throw cause;
+				exec.signal.addEventListener('abort', () => reject(new Error(`${TOOL_NAME} was cancelled`)), { once: true });
+			});
+
+			let value;
+			try {
+				value = await Promise.race([settled, aborted]);
+			} finally {
+				pending.delete(exec.callId);
 			}
-			const items = answer.answers.filter((item) => item.id === REVIEW_ID);
-			const item = items.length === 1 ? items[0] : undefined;
-			if (item !== undefined && item.selected.length === 1 && item.selected[0] === APPROVE_LABEL && item.custom === undefined) {
-				return { approved: true };
-			}
-			const feedback = item?.custom?.trim();
-			return feedback === undefined || feedback === '' ? { approved: false } : { approved: false, feedback };
+			if (value.decision === REVISE) exec.concludeTurn();
+			return value;
 		},
-		presentCall(args) {
-			if (typeof args?.plan !== 'string') return undefined;
-			return {
-				card: 'generic',
-				title: firstHeading(args.plan) ?? TOOL_NAME,
-				kind: 'other',
-				content: [{ type: 'text', text: args.plan }],
-			};
-		},
-	};
-	ctx.effect(() => ctx.tools.register(tool), 'present-plan: register present_plan');
+	});
 }

@@ -1,11 +1,14 @@
-# present_plan: a plan-review card that does not require plan mode.
+# present_artefact: one review card for any produced artefact.
 #
-# The row mounts one Host-only plugin: it registers the global `present_plan`
-# tool, which asks the user-questions channel for a `plan-review` presentation
-# with the plan as the question's `detail`. No Client half is needed: the
-# review card and the full-plan preview are provided by the shipped
-# @deepseek-ai/dsh-client-ui-user-questions and @deepseek-ai/dsh-client-ui-plan
-# plugins, which narrow any question carrying that intent.
+# The row mounts a Host + Client package:
+#   - Host (index.js): registers the global `present_artefact` tool, holds the
+#     pending review, and answers it over an authenticated `/api` route.
+#   - Client (client.js): renders the review card at the tool call position and
+#     the full inline artefact in the right sidebar.
+#
+# Inline content travels in the tool call arguments, so nothing is written to
+# disk and the review works under a read-only sandbox. File artefacts are only
+# read, and open through the shipped `dsh-resource://file/…` preview.
 - insert:
-    - id: tool-present-plan
-      name: 'dsh-tool-present-plan'
+    - id: tool-present-artefact
+      name: 'dsh-present-artefact'

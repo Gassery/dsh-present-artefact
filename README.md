@@ -1,6 +1,18 @@
-# dsh-tool-present-plan
+# dsh-present-artefact
 
-A DeepSeek Harness bundle that adds one Host tool, `present_plan`: it shows a plan in the same review card plan mode uses for `exit_plan_mode`, and waits for the user's decision — in any mode, without entering or leaving plan mode.
+A DeepSeek Harness bundle that adds one tool, `present_artefact`: it shows a
+single produced artefact to the user in a review card — a plan, document,
+code, diff, table, image, or Office file — and waits for their decision.
+
+The card keeps the review shape that matters: a heading, a summary, a
+**View full text** link that opens the artefact in the right sidebar, and two
+decisions — approve or request changes.
+
+Inline content travels in the tool call's own arguments, so the review needs
+**no write access**: nothing is created on disk, and the card is rebuilt from
+the session log after a reload. File artefacts are only read, and open through
+the shipped `dsh-resource://file/…` preview, which already renders PDF, Office,
+Excel, images, code and plain text by extension.
 
 ## Install
 
@@ -10,18 +22,36 @@ dsh plugin install github:Gassery/dsh-tool-present-plan --profile <profile>
 
 Or install the same spec from the Web UI's plugin manager.
 
-## Behavior
+## Tool contract
 
-- Approval returns `{ approved: true }`; the model carries the plan out from its next step.
-- "Request changes" closes the review, ends the turn, and returns `{ approved: false }` so the user replies in their own words.
-- The plan markdown travels in the question's `detail`, which is the field the review card renders and previews. `header` and `question` exist because the question API requires them; the card draws its own localized chrome.
-- The review intentionally omits `intent.callId`. Plan mode uses that field to reopen a logged `exit_plan_mode` call; this tool's review is rendered from the question itself, so it works for any tool name.
-- No Client half is needed. The review card and the plan preview ship with `@deepseek-ai/dsh-client-ui-user-questions` and `@deepseek-ai/dsh-client-ui-plan`.
-- The package imports nothing from other Harness packages: a bundle linked into a profile from outside its `node_modules` cannot rely on the loader's package routing for its own imports.
+| Parameter | Meaning |
+| --- | --- |
+| `title` | Card heading. Required. |
+| `summary` | One or two sentences under the heading. Omit to use the body's first paragraph. |
+| `body` | The artefact as markdown. Inline artefacts never touch the filesystem. |
+| `path` | An existing regular file to review. Read-only. |
+
+Exactly one of `body` / `path` is required.
+
+The result is `{ decision: 'agree' | 'revise', feedback?: string }`. Approving
+lets the model carry on; requesting changes ends the turn so the user can say
+what to change.
+
+## Surfaces
+
+- `tool.call.toolview` keyed `present_artefact` — the review card, at the call
+  position in the conversation. It reads the call's arguments, so it survives a
+  reload.
+- `sidebar.right.pane.tab` keyed `dsh-present-artefact` — the full inline body
+  at reading width. The tab holds the text in navigation parameters, so it is
+  temporary: after a reload, click **View full text** again to reopen it.
+- `POST /api/present-artefact/answer` — the one authenticated route the card
+  uses to settle the pending review.
 
 ## Layout
 
-- `index.js` — the tool definition.
+- `index.js` — Host half: the tool, the pending-review registry, the answer route.
+- `client.js` — Client half: the review card and the sidebar preview.
 - `cordis.patch.yml` — the bundle's one row.
 - `locale/{en,zh}.json` — Plugin Manager title and description.
 - `icon.svg` — inventory icon.
