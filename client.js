@@ -106,6 +106,125 @@ window.__ModuleLoader__.load({
       }
     }
 
+    /**
+     * Render inline markdown — code spans and bold — as React nodes.
+     *
+     * @param text - one line of markdown.
+     * @param prefix - key prefix for the produced nodes.
+     * @returns the inline children.
+     */
+    function inlineNodes(text, prefix) {
+      const nodes = [];
+      const pattern = /(`[^`]+`|\*\*[^*]+\*\*)/g;
+      let last = 0;
+      let index = 0;
+      let match = pattern.exec(text);
+      while (match !== null) {
+        if (match.index > last) nodes.push(text.slice(last, match.index));
+        const token = match[0];
+        if (token.charAt(0) === '`') {
+          nodes.push(h('code', { key: `${prefix}-c${index}`, style: styles.inlineCode }, token.slice(1, -1)));
+        } else {
+          nodes.push(h('strong', { key: `${prefix}-b${index}`, style: styles.strong }, token.slice(2, -2)));
+        }
+        last = match.index + token.length;
+        index += 1;
+        match = pattern.exec(text);
+      }
+      if (last < text.length) nodes.push(text.slice(last));
+      return nodes;
+    }
+
+    /** True when a line opens a block other than a paragraph. */
+    function startsBlock(line) {
+      return /^(#{1,6}\s|```|>|\s*[-*+]\s|\s*\d+[.)]\s)/.test(line) || /^\s*([-*_])\1{2,}\s*$/.test(line);
+    }
+
+    /**
+     * Render the artefact body as markdown: headings, paragraphs, lists,
+     * fenced code, blockquotes and rules. Deliberately small — no HTML, no raw
+     * injection, no external parser.
+     *
+     * @param markdown - the artefact body.
+     * @returns block-level React children.
+     */
+    function renderMarkdown(markdown) {
+      const lines = String(markdown).split('\n');
+      const blocks = [];
+      let i = 0;
+      let key = 0;
+      const nextKey = () => `md${key++}`;
+      while (i < lines.length) {
+        const line = lines[i];
+        if (line.trim() === '') {
+          i += 1;
+          continue;
+        }
+        const fence = /^```([\w+-]*)\s*$/.exec(line);
+        if (fence !== null) {
+          const body = [];
+          i += 1;
+          while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+            body.push(lines[i]);
+            i += 1;
+          }
+          if (i < lines.length) i += 1;
+          blocks.push(h('pre', { key: nextKey(), style: styles.pre }, h('code', null, body.join('\n'))));
+          continue;
+        }
+        const heading = /^(#{1,6})\s+(.*?)\s*$/.exec(line);
+        if (heading !== null) {
+          const level = Math.min(heading[1].length + 1, 6);
+          blocks.push(h(`h${level}`, { key: nextKey(), style: level <= 2 ? styles.h1 : styles.h2 }, inlineNodes(heading[2], nextKey())));
+          i += 1;
+          continue;
+        }
+        if (/^\s*([-*_])\1{2,}\s*$/.test(line)) {
+          blocks.push(h('hr', { key: nextKey(), style: styles.rule }));
+          i += 1;
+          continue;
+        }
+        if (/^>\s?/.test(line)) {
+          const body = [];
+          while (i < lines.length && /^>\s?/.test(lines[i])) {
+            body.push(lines[i].replace(/^>\s?/, ''));
+            i += 1;
+          }
+          blocks.push(h('blockquote', { key: nextKey(), style: styles.quote }, renderMarkdown(body.join('\n'))));
+          continue;
+        }
+        if (/^\s*[-*+]\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*[-*+]\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\s*[-*+]\s+/, ''));
+            i += 1;
+          }
+          blocks.push(h('ul', { key: nextKey(), style: styles.list }, items.map((item, n) => h('li', { key: `li${n}`, style: styles.listItem }, inlineNodes(item, `li${n}`)))));
+          continue;
+        }
+        if (/^\s*\d+[.)]\s+/.test(line)) {
+          const items = [];
+          while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
+            items.push(lines[i].replace(/^\s*\d+[.)]\s+/, ''));
+            i += 1;
+          }
+          blocks.push(h('ol', { key: nextKey(), style: styles.list }, items.map((item, n) => h('li', { key: `li${n}`, style: styles.listItem }, inlineNodes(item, `li${n}`)))));
+          continue;
+        }
+        const paragraph = [];
+        while (i < lines.length && lines[i].trim() !== '' && !startsBlock(lines[i])) {
+          paragraph.push(lines[i]);
+          i += 1;
+        }
+        if (paragraph.length === 0) {
+          paragraph.push(line);
+          i += 1;
+        }
+        blocks.push(h('p', { key: nextKey(), style: styles.paragraph }, inlineNodes(paragraph.join(' '), nextKey())));
+      }
+      return blocks;
+    }
+
     /** Inline styles shared by the card and its controls. */
     const styles = {
       card: {
@@ -182,9 +301,36 @@ window.__ModuleLoader__.load({
         fontSize: 'var(--dsh-content-font-size, 14px)',
         lineHeight: '1.65',
         color: 'var(--dsw-alias-label-primary, #eee)',
-        whiteSpace: 'pre-wrap',
         overflowWrap: 'anywhere',
       },
+      h1: { margin: '4px 0 12px', fontSize: '20px', lineHeight: '28px', fontWeight: 600 },
+      h2: { margin: '18px 0 8px', fontSize: '16px', lineHeight: '24px', fontWeight: 600 },
+      paragraph: { margin: '0 0 12px' },
+      list: { margin: '0 0 12px', paddingLeft: '22px' },
+      listItem: { margin: '2px 0' },
+      pre: {
+        margin: '0 0 12px',
+        padding: '10px 12px',
+        borderRadius: '8px',
+        background: 'var(--dsw-alias-bg-module-platform, #111)',
+        overflowX: 'auto',
+        fontSize: '13px',
+        lineHeight: '20px',
+      },
+      inlineCode: {
+        padding: '1px 5px',
+        borderRadius: '4px',
+        background: 'var(--dsw-alias-bg-overlay, #2a2a2a)',
+        fontSize: '0.92em',
+      },
+      strong: { fontWeight: 600 },
+      quote: {
+        margin: '0 0 12px',
+        paddingLeft: '12px',
+        borderLeft: '3px solid var(--dsw-alias-border-l2, #444)',
+        color: 'var(--dsw-alias-label-secondary, #aaa)',
+      },
+      rule: { border: 'none', borderTop: '1px solid var(--dsw-alias-border-l2, #444)', margin: '16px 0' },
     };
 
     /**
@@ -279,12 +425,7 @@ window.__ModuleLoader__.load({
       if (doc === undefined || typeof doc.markdown !== 'string') {
         return h('div', { style: styles.preview }, t('closed'));
       }
-      return h(
-        'div',
-        { style: styles.preview, 'data-present-artefact-preview': true },
-        h('h2', { style: { margin: '0 0 12px', fontSize: '18px' } }, doc.title ?? t('artefact')),
-        doc.markdown,
-      );
+      return h('article', { style: styles.preview, 'data-present-artefact-preview': true }, renderMarkdown(doc.markdown));
     }
 
     return {
