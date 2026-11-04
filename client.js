@@ -1,17 +1,23 @@
 /**
  * Client half of `dsh-present-artefact`.
  *
- * One seat, no forks of shipped UI: `tool.call.toolview` keyed by the tool name
- * renders the review card where the call appears. It reads the call's own
- * arguments, so the artefact body survives a reload without touching the
- * filesystem.
+ * Three pieces, all on public Client APIs:
  *
- * "View full text" does not render anything itself. Inline artefacts open the
- * shipped temporary review preview (`dsh-resource://plan-review/…`) with the
- * markdown in its navigation parameters, which is the exact preview
- * `exit_plan_mode` uses — same `MarkdownText`, same typography. File artefacts
- * open the shipped `dsh-resource://file/…` preview, which picks a renderer by
- * extension. Reusing both keeps this card a thin shell around DSH's own UI.
+ *   - `PendingObserver` sits in `conversation.composer.dock` and watches the
+ *     Chat nodes. While a `present_artefact` call is dispatched and unanswered
+ *     it publishes an `artefact-review` pending interaction; when the call
+ *     settles it unpublishes, which hands the composer back.
+ *   - `ArtefactReview` is a `conversation.composer` chain entry elected only for
+ *     that interaction, so the review takes over the composer exactly like the
+ *     shipped plan review does, and opens the full text by itself.
+ *   - `ArtefactRow` keeps the transcript row honest: one compact line, no
+ *     duplicate controls.
+ *
+ * The full text is never rendered here. Inline artefacts open the shipped
+ * temporary review preview (`dsh-resource://plan-review/…` with `planReview`
+ * parameters), the same `MarkdownText` pane `exit_plan_mode` uses; file
+ * artefacts open the shipped `dsh-resource://file/…` preview, which picks a
+ * renderer by extension.
  */
 window.__ModuleLoader__.load({
   id: 'dsh-present-artefact',
@@ -20,6 +26,8 @@ window.__ModuleLoader__.load({
     const h = React.createElement;
 
     const NS = 'presentArtefact';
+    const TOOL_NAME = 'present_artefact';
+    const KIND = 'artefact-review';
 
     const DICT = {
       en: {
@@ -32,6 +40,7 @@ window.__ModuleLoader__.load({
         failed: 'Could not send the answer.',
         artefact: 'Artefact',
         pending: 'Preparing the artefact…',
+        waiting: 'Waiting for your review',
       },
       zh: {
         banner: '产物待审',
@@ -43,6 +52,7 @@ window.__ModuleLoader__.load({
         failed: '提交失败。',
         artefact: '产物',
         pending: '产物准备中…',
+        waiting: '等待你的评审',
       },
     };
 
@@ -54,17 +64,10 @@ window.__ModuleLoader__.load({
     /** Build the shipped file-preview address for one session path. */
     function fileAddress(sessionId, path) {
       const normalized = path.replace(/\\/g, '/').replace(/^(?:\.\/)+/, '');
-      return `dsh-resource://file/session/${encodeSegment(sessionId)}/${normalized
-        .split('/')
-        .map(encodeSegment)
-        .join('/')}`;
+      return `dsh-resource://file/session/${encodeSegment(sessionId)}/${normalized.split('/').map(encodeSegment).join('/')}`;
     }
 
-    /**
-     * Build the shipped temporary review preview address. Its `planReview`
-     * parameters are the same ones `ui-plan` passes, so the pane renders the
-     * markdown with the product's own renderer.
-     */
+    /** Build the shipped temporary review preview address for one call. */
     function reviewAddress(sessionId, callId) {
       return `dsh-resource://plan-review/${encodeSegment(sessionId)}/${encodeSegment(callId)}`;
     }
@@ -72,8 +75,7 @@ window.__ModuleLoader__.load({
     /** First non-heading paragraph of a markdown body, for the card summary. */
     function firstParagraph(body) {
       if (typeof body !== 'string') return '';
-      const paragraphs = body.split(/\n\s*\n/);
-      for (const paragraph of paragraphs) {
+      for (const paragraph of body.split(/\n\s*\n/)) {
         const text = paragraph
           .split('\n')
           .filter((line) => !/^\s{0,3}#{1,6}\s/.test(line))
@@ -97,24 +99,46 @@ window.__ModuleLoader__.load({
     function decisionOf(text) {
       try {
         const value = JSON.parse(text);
-        return value !== null && typeof value === 'object' && (value.decision === 'agree' || value.decision === 'revise')
-          ? value.decision
-          : undefined;
+        return value !== null && typeof value === 'object' && (value.decision === 'agree' || value.decision === 'revise') ? value.decision : undefined;
       } catch {
         return undefined;
       }
     }
 
-    /** Inline styles; type sizes match the shipped plan-review card. */
+    /**
+     * Find the newest dispatched, unanswered `present_artefact` call.
+     *
+     * @param nodes - Chat node store.
+     * @param order - loaded node keys.
+     * @returns the call and its argument view, or undefined.
+     */
+    function findPending(nodes, order) {
+      let found;
+      for (const key of order) {
+        const node = nodes.get(key);
+        if (node === undefined || node.kind !== 'tool-call') continue;
+        const root = node.data === undefined ? undefined : node.data.root;
+        if (root === undefined || root.name !== TOOL_NAME || root.phase !== 'start') continue;
+        found = root;
+      }
+      return found;
+    }
+
+    /** Inline styles; type sizes and spacing follow the shipped review card. */
     const styles = {
+      frame: {
+        display: 'flex',
+        justifyContent: 'center',
+        padding: '6px calc(var(--dsh-composer-side-clearance, 16px) + 16px) 10px',
+      },
       card: {
+        width: '100%',
+        maxWidth: 'var(--dsh-composer-card-max-width, 752px)',
         border: '1px solid var(--dsw-alias-border-l2, #3a3a3a)',
         borderRadius: '12px',
         background: 'var(--dsw-specific-input-major, #1f1f1f)',
         color: 'var(--dsw-alias-label-primary, #eee)',
         padding: '12px 14px',
-        margin: '6px 0',
-        maxWidth: 'var(--dsh-chat-content-width, 720px)',
       },
       banner: {
         display: 'flex',
@@ -125,13 +149,7 @@ window.__ModuleLoader__.load({
         color: 'var(--dsw-alias-label-secondary, #aaa)',
         marginBottom: '8px',
       },
-      dot: {
-        width: '8px',
-        height: '8px',
-        borderRadius: '999px',
-        background: 'var(--dsw-alias-state-warn-primary, #d8a03d)',
-        flex: '0 0 auto',
-      },
+      dot: { width: '8px', height: '8px', borderRadius: '999px', background: 'var(--dsw-alias-state-warn-primary, #d8a03d)', flex: '0 0 auto' },
       title: { margin: '0 0 6px', fontSize: '15px', lineHeight: '22px', fontWeight: 500 },
       summary: {
         margin: 0,
@@ -173,58 +191,78 @@ window.__ModuleLoader__.load({
         padding: 0,
       },
       error: { color: 'var(--dsw-alias-state-error-primary, #e06c75)', fontSize: '14px', lineHeight: '20px', marginTop: '8px' },
-      outcome: { margin: '6px 0 0', fontSize: '14px', lineHeight: '24px', color: 'var(--dsw-alias-label-primary, #eee)' },
+      row: {
+        fontSize: '14px',
+        lineHeight: '24px',
+        color: 'var(--dsw-alias-label-secondary, #aaa)',
+        padding: '2px 0',
+      },
     };
 
     /**
-     * The review card at the tool call position.
+     * Publish one pending interaction per unanswered review, and withdraw it the
+     * moment the call settles.
      *
-     * @param props - Tool view owner props plus the routed phase block.
-     * @returns the card for the current phase.
+     * @param props - dock slot props plus the publisher and translator.
+     * @returns nothing; this seat only keeps the registry in sync.
      */
-    function ArtefactCard(props) {
-      const { phase, block, callId, sessionId, openTab, t } = props;
+    function PendingObserver({ sessionId, useChat, publish, t }) {
+      const order = useChat((snapshot) => snapshot.order);
+      const nodes = useChat((snapshot) => snapshot.nodes);
+      const pending = React.useMemo(() => findPending(nodes, order), [nodes, order]);
+
+      React.useEffect(() => {
+        if (pending === undefined) return undefined;
+        const args = pending.args;
+        const carrier = {
+          key: `${TOOL_NAME}:${pending.callId}`,
+          kind: KIND,
+          sessionId,
+          callId: pending.callId,
+          title: args.text('title'),
+          summary: args.text('summary'),
+          body: args.text('body'),
+          path: args.text('path'),
+        };
+        const unpublish = publish(carrier, async () => {});
+        return () => unpublish();
+      }, [pending, publish, sessionId, t]);
+
+      return null;
+    }
+
+    /**
+     * The review card, elected into the composer seat.
+     *
+     * @param props - chain owner props; `matched` carries the published carrier.
+     * @returns the review, or nothing when the carrier is gone.
+     */
+    function ArtefactReview({ matched, sessionId, t, openTab }) {
       const [busy, setBusy] = React.useState(false);
       const [error, setError] = React.useState(null);
+      const title = matched.title !== undefined && matched.title !== '' ? matched.title : t('artefact');
+      const summary = matched.summary !== undefined && matched.summary !== '' ? matched.summary : firstParagraph(matched.body);
 
-      const args = block === undefined || block === null ? undefined : block.args;
-      const title = args === undefined ? undefined : args.text('title');
-      const body = args === undefined ? undefined : args.text('body');
-      const path = args === undefined ? undefined : args.text('path');
-      const summaryArg = args === undefined ? undefined : args.text('summary');
-      const summary = summaryArg !== undefined && summaryArg.trim() !== '' ? summaryArg : firstParagraph(body);
-
-      const settled = phase === 'result';
-      const decision = settled ? decisionOf(resultText(block)) : undefined;
-      const outcome =
-        decision === 'agree'
-          ? t('approved')
-          : decision === 'revise'
-            ? t('revised')
-            : settled && block.isError === true
-              ? t('failed')
-              : resultText(block);
-
-      const openFull = () => {
-        if (path !== undefined && path !== '') {
-          if (props.openFile !== undefined) props.openFile(path);
-          else openTab(fileAddress(sessionId, path));
+      // The shipped plan review opens its full text as soon as the card mounts;
+      // this does the same, once per review.
+      const autoOpened = React.useRef(false);
+      React.useEffect(() => {
+        if (autoOpened.current) return;
+        autoOpened.current = true;
+        if (typeof matched.body === 'string' && matched.body !== '') {
+          openTab(reviewAddress(sessionId, matched.callId), { params: { planReview: { markdown: matched.body, title } } });
           return;
         }
-        if (body !== undefined) {
-          openTab(reviewAddress(sessionId, callId), {
-            params: { planReview: { markdown: body, title: title ?? '' } },
-          });
-        }
-      };
+        if (typeof matched.path === 'string' && matched.path !== '') openTab(fileAddress(sessionId, matched.path));
+      }, [matched.callId, matched.body, matched.path, openTab, sessionId, title]);
 
-      const answer = (decisionValue) => {
+      const answer = (decision) => {
         setBusy(true);
         setError(null);
         fetch('api/present-artefact/answer', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ callId, decision: decisionValue }),
+          body: JSON.stringify({ callId: matched.callId, decision }),
         })
           .then(async (response) => {
             const value = await response.json().catch(() => ({}));
@@ -236,46 +274,67 @@ window.__ModuleLoader__.load({
           });
       };
 
-      if (phase === 'preparing') {
-        return h(
-          'div',
-          { style: styles.card },
-          h('div', { style: styles.banner }, h('span', { style: styles.dot }), t('banner')),
-          h('p', { style: styles.summary }, t('pending')),
-        );
-      }
-
       return h(
         'div',
-        { style: styles.card, 'data-present-artefact': callId },
+        { style: styles.frame },
         h(
           'div',
-          { style: styles.banner },
-          h('span', { style: styles.dot }),
-          h('span', null, t('banner')),
-          (body !== undefined || (path !== undefined && path !== '')) &&
-            h('button', { type: 'button', style: styles.link, onClick: openFull }, `${t('full')} ›`),
+          { style: styles.card, 'data-present-artefact': matched.callId },
+          h(
+            'div',
+            { style: styles.banner },
+            h('span', { style: styles.dot }),
+            h('span', null, t('banner')),
+            (typeof matched.body === 'string' || (typeof matched.path === 'string' && matched.path !== '')) &&
+              h(
+                'button',
+                {
+                  type: 'button',
+                  style: styles.link,
+                  onClick: () => {
+                    if (typeof matched.body === 'string' && matched.body !== '') {
+                      openTab(reviewAddress(sessionId, matched.callId), { params: { planReview: { markdown: matched.body, title } } });
+                      return;
+                    }
+                    if (typeof matched.path === 'string' && matched.path !== '') openTab(fileAddress(sessionId, matched.path));
+                  },
+                },
+                `${t('full')} ›`,
+              ),
+          ),
+          h('h3', { style: styles.title }, title),
+          summary !== '' && h('p', { style: styles.summary }, summary),
+          h(
+            'div',
+            { style: styles.footer },
+            h('button', { type: 'button', style: styles.ghost, disabled: busy, onClick: () => answer('revise') }, t('revise')),
+            h('button', { type: 'button', style: styles.primary, disabled: busy, onClick: () => answer('agree') }, t('approve')),
+          ),
+          error !== null && h('div', { style: styles.error }, error),
         ),
-        h('h3', { style: styles.title }, title ?? t('artefact')),
-        summary !== '' && h('p', { style: styles.summary }, summary),
-        settled
-          ? h('p', { style: styles.outcome }, outcome)
-          : h(
-              'div',
-              { style: styles.footer },
-              h('button', { type: 'button', style: styles.ghost, disabled: busy, onClick: () => answer('revise') }, t('revise')),
-              h('button', { type: 'button', style: styles.primary, disabled: busy, onClick: () => answer('agree') }, t('approve')),
-            ),
-        error !== null && h('div', { style: styles.error }, error),
       );
     }
 
+    /**
+     * One compact transcript line: the pending state, then the recorded outcome.
+     * The actionable card lives in the composer, not here.
+     *
+     * @param props - tool view owner props.
+     * @returns the row, or nothing before the call is dispatched.
+     */
+    function ArtefactRow({ phase, block, t }) {
+      if (phase === 'preparing') return h('div', { style: styles.row }, t('pending'));
+      if (phase === 'start') return h('div', { style: styles.row }, t('waiting'));
+      const decision = decisionOf(resultText(block));
+      const outcome = decision === 'agree' ? t('approved') : decision === 'revise' ? t('revised') : block.isError === true ? t('failed') : resultText(block);
+      return h('div', { style: styles.row }, outcome);
+    }
+
     return {
-      inject: ['slots', 'locale', 'sidebarRight'],
+      inject: ['slots', 'locale', 'sidebarRight', 'uiSession'],
       apply(ctx) {
         // A package namespace outside the shipped LocaleNamespaceMap registers
-        // one locale at a time; the two-argument form is reserved for namespaces
-        // that declare their key union at build time.
+        // one locale at a time.
         ctx.effect(() => {
           const disposers = [ctx.locale.register(NS, 'en', DICT.en), ctx.locale.register(NS, 'zh', DICT.zh)];
           return () => {
@@ -285,10 +344,27 @@ window.__ModuleLoader__.load({
         const t = ctx.locale.bind(NS);
         const openTab = (address, options) => ctx.sidebarRight.openResource(address, options);
 
-        ctx.slots.inject('tool.call.toolview', () =>
-          ctx.slots.register({ name: 'tool.call.toolview', key: 'present_artefact', locale: NS }, (props) =>
-            h(ArtefactCard, { ...props, openTab, t }),
+        const publish = ctx.uiSession.registerPendingInteraction((interaction) => (interaction.kind === KIND ? 3 : -1));
+
+        ctx.slots.inject('conversation.composer.dock', () =>
+          ctx.slots.register({ name: 'conversation.composer.dock', id: 'dsh-present-artefact', order: 50 }, (props) =>
+            h(PendingObserver, { ...props, publish, t }),
           ),
+        );
+
+        ctx.slots.inject('conversation.composer', () =>
+          ctx.slots.register(
+            {
+              name: 'conversation.composer',
+              locale: NS,
+              select: ({ pendingInteraction }) => (pendingInteraction !== undefined && pendingInteraction !== null && pendingInteraction.kind === KIND ? pendingInteraction : null),
+            },
+            (props) => h(ArtefactReview, { ...props, openTab, t }),
+          ),
+        );
+
+        ctx.slots.inject('tool.call.toolview', () =>
+          ctx.slots.register({ name: 'tool.call.toolview', key: TOOL_NAME, locale: NS }, ArtefactRow),
         );
       },
     };
