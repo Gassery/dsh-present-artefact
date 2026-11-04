@@ -248,7 +248,7 @@ window.__ModuleLoader__.load({
               h('button', { type: 'button', style: styles.ghost, disabled: busy, onClick: () => answer('revise') }, t('revise')),
               h('button', { type: 'button', style: styles.primary, disabled: busy, onClick: () => answer('agree') }, t('approve')),
             ),
-        error !== null && h('div', { style: styles.error }, `${t('failed')} ${error}`),
+        error !== null && h('div', { style: styles.error }, t('failed')),
       );
     }
 
@@ -276,7 +276,18 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots', 'locale', 'sidebarRight', 'sidebarRightTabs'],
       apply(ctx) {
-        ctx.effect(() => ctx.locale.register(NS, DICT), 'present-artefact: dictionaries');
+        // A package namespace outside the shipped LocaleNamespaceMap registers
+        // one locale at a time; the two-argument form is reserved for namespaces
+        // that declare their key union at build time.
+        ctx.effect(() => {
+          const disposers = [
+            ctx.locale.register(NS, 'en', DICT.en),
+            ctx.locale.register(NS, 'zh', DICT.zh),
+          ];
+          return () => {
+            for (const dispose of disposers) dispose();
+          };
+        }, 'present-artefact: dictionaries');
         const t = ctx.locale.bind(NS);
 
         ctx.effect(() => ctx.sidebarRightTabs.register({
