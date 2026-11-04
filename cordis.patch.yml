@@ -1,0 +1,11 @@
+# present_plan: a plan-review card that does not require plan mode.
+#
+# The row mounts one Host-only plugin: it registers the global `present_plan`
+# tool, which asks the user-questions channel for a `plan-review` presentation
+# with the plan as the question's `detail`. No Client half is needed: the
+# review card and the full-plan preview are provided by the shipped
+# @deepseek-ai/dsh-client-ui-user-questions and @deepseek-ai/dsh-client-ui-plan
+# plugins, which narrow any question carrying that intent.
+- insert:
+    - id: tool-present-plan
+      name: 'dsh-tool-present-plan'

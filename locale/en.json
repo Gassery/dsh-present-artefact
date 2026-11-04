@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Present Plan",
+    "description": "Adds a present_plan tool that puts a plan in the plan-review card and waits for the user's approval, in any mode and without changing plan mode."
+  }
+}

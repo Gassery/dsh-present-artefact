@@ -1,0 +1,38 @@
+{
+  "name": "dsh-tool-present-plan",
+  "version": "1.0.0",
+  "description": "A present_plan tool that shows a plan in the plan-review card and waits for the user's approval, in any mode.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "plan"
+  ],
+  "license": "MIT",
+  "author": "Gassery",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gassery/dsh-tool-present-plan.git"
+  },
+  "homepage": "https://github.com/Gassery/dsh-tool-present-plan#readme",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
