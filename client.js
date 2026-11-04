@@ -195,10 +195,22 @@ window.__ModuleLoader__.load({
       },
       error: { color: 'var(--dsw-alias-state-error-primary, #e06c75)', fontSize: '14px', lineHeight: '20px', marginTop: '8px' },
       row: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
         fontSize: '14px',
         lineHeight: '24px',
         color: 'var(--dsw-alias-label-secondary, #aaa)',
         padding: '2px 0',
+      },
+      rowLink: {
+        border: 'none',
+        background: 'transparent',
+        color: 'var(--dsw-alias-label-secondary, #aaa)',
+        cursor: 'pointer',
+        fontSize: '14px',
+        lineHeight: '20px',
+        padding: 0,
       },
     };
 
@@ -325,18 +337,57 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * One compact transcript line: the pending state, then the recorded outcome.
-     * The actionable card lives in the composer, not here.
+     * Open one artefact from its logged argument view.
+     *
+     * @param args - the call's argument reader.
+     * @param callId - call identity for the inline preview address.
+     * @param sessionId - owning Session.
+     * @param openTab - sidebar navigation.
+     * @param title - artefact title.
+     * @returns whether anything opened.
+     */
+    function openArtefact(args, callId, sessionId, openTab, title) {
+      const body = args === undefined ? undefined : args.text('body');
+      if (typeof body === 'string' && body !== '') {
+        openTab(reviewAddress(sessionId, callId), { params: { planReview: { markdown: body, title: title ?? '' } } });
+        return true;
+      }
+      const path = args === undefined ? undefined : args.text('path');
+      if (typeof path === 'string' && path !== '') {
+        openTab(fileAddress(sessionId, path));
+        return true;
+      }
+      return false;
+    }
+
+    /**
+     * One compact transcript line: the pending state, then the recorded outcome
+     * plus a way back into the full text. The actionable card lives in the
+     * composer, not here.
      *
      * @param props - tool view owner props.
      * @returns the row, or nothing before the call is dispatched.
      */
-    function ArtefactRow({ phase, block, t }) {
+    function ArtefactRow({ phase, block, sessionId, t, openTab }) {
       if (phase === 'preparing') return h('div', { style: styles.row }, t('pending'));
       if (phase === 'start') return h('div', { style: styles.row }, t('waiting'));
       const decision = decisionOf(resultText(block));
       const outcome = decision === 'agree' ? t('approved') : decision === 'revise' ? t('revised') : block.isError === true ? t('failed') : resultText(block);
-      return h('div', { style: styles.row }, outcome);
+      const title = block === undefined || block.args === undefined ? undefined : block.args.text('title');
+      return h(
+        'div',
+        { style: styles.row },
+        h('span', null, outcome),
+        h(
+          'button',
+          {
+            type: 'button',
+            style: styles.rowLink,
+            onClick: () => openArtefact(block.args, block.callId, sessionId, openTab, title),
+          },
+          `${t('full')} ›`,
+        ),
+      );
     }
 
     return {
@@ -373,7 +424,7 @@ window.__ModuleLoader__.load({
         );
 
         ctx.slots.inject('tool.call.toolview', () =>
-          ctx.slots.register({ name: 'tool.call.toolview', key: TOOL_NAME, locale: NS }, ArtefactRow),
+          ctx.slots.register({ name: 'tool.call.toolview', key: TOOL_NAME, locale: NS }, (props) => h(ArtefactRow, { ...props, openTab })),
         );
       },
     };
