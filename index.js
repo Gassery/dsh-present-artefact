@@ -70,17 +70,6 @@ const OUTPUT_SCHEMA = {
 	required: ['decision'],
 };
 
-/**
- * State one outcome to the model.
- *
- * @param value - The validated canonical result.
- * @returns The model-facing result text.
- */
-function outcomeText(value) {
-	if (value.decision === AGREE) return 'The user approved this artefact. Carry on from your next step.';
-	return 'The user asked for changes to this artefact. The turn ends here; read their next message before revising it.';
-}
-
 /** The services this plugin needs before it can mount. */
 export const inject = ['tools', 'connection'];
 
@@ -123,7 +112,9 @@ export function apply(ctx) {
 		parameters: PARAMETERS,
 		output: {
 			schema: OUTPUT_SCHEMA,
-			render: (_args, value) => [{ type: 'text', text: outcomeText(value) }],
+			// Machine-readable result: the Client card renders the localized sentence,
+			// so the transcript carries no English prose the user did not ask for.
+			render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
 		},
 		async execute(args, exec) {
 			const agent = exec.agent;

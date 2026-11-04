@@ -94,6 +94,18 @@ window.__ModuleLoader__.load({
         .join(' ');
     }
 
+    /** Read the decision out of the machine-readable result the Host returns. */
+    function decisionOf(text) {
+      try {
+        const value = JSON.parse(text);
+        return value !== null && typeof value === 'object' && (value.decision === 'agree' || value.decision === 'revise')
+          ? value.decision
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
     /** Inline styles shared by the card and its controls. */
     const styles = {
       card: {
@@ -162,6 +174,7 @@ window.__ModuleLoader__.load({
         padding: 0,
       },
       error: { color: 'var(--dsw-alias-state-error-primary, #e06c75)', fontSize: '14px', lineHeight: '20px', marginTop: '8px' },
+      outcome: { margin: '6px 0 0', fontSize: '14px', lineHeight: '24px', color: 'var(--dsw-alias-label-primary, #eee)' },
       preview: {
         height: '100%',
         overflow: 'auto',
@@ -193,7 +206,8 @@ window.__ModuleLoader__.load({
       const summary = summaryArg !== undefined && summaryArg.trim() !== '' ? summaryArg : firstParagraph(body);
 
       const settled = phase === 'result';
-      const result = settled ? resultText(block) : '';
+      const decision = settled ? decisionOf(resultText(block)) : undefined;
+      const outcome = decision === 'agree' ? t('approved') : decision === 'revise' ? t('revised') : settled && block.isError === true ? t('failed') : resultText(block);
 
       const openFull = () => {
         if (path !== undefined && path !== '') {
@@ -241,7 +255,7 @@ window.__ModuleLoader__.load({
         h('h3', { style: styles.title }, title ?? t('artefact')),
         summary !== '' && h('p', { style: styles.summary }, summary),
         settled
-          ? h('p', { style: styles.summary }, result)
+          ? h('p', { style: styles.outcome }, outcome)
           : h(
               'div',
               { style: styles.footer },
