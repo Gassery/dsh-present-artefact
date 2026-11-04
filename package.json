@@ -1,6 +1,6 @@
 {
   "name": "dsh-present-artefact",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "A present_artefact tool that shows one produced artefact in a review card and waits for the user's approval, without requiring write access.",
   "type": "module",
   "exports": {

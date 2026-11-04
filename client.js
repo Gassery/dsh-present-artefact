@@ -106,19 +106,22 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * Find the newest dispatched, unanswered `present_artefact` call.
+     * Find the newest dispatched, unanswered `present_artefact` call. Tool calls
+     * are nested under their step, so this walks every materialized node rather
+     * than the top-level key order.
      *
      * @param nodes - Chat node store.
-     * @param order - loaded node keys.
-     * @returns the call and its argument view, or undefined.
+     * @returns the call block, or undefined.
      */
-    function findPending(nodes, order) {
+    function findPendingRoot(nodes) {
       let found;
-      for (const key of order) {
-        const node = nodes.get(key);
-        if (node === undefined || node.kind !== 'tool-call') continue;
+      let anchor = -1;
+      for (const node of nodes.values()) {
+        if (node === null || node.kind !== 'tool-call') continue;
         const root = node.data === undefined ? undefined : node.data.root;
         if (root === undefined || root.name !== TOOL_NAME || root.phase !== 'start') continue;
+        if (typeof node.anchorSeq === 'number' && node.anchorSeq < anchor) continue;
+        anchor = typeof node.anchorSeq === 'number' ? node.anchorSeq : anchor;
         found = root;
       }
       return found;
@@ -207,18 +210,24 @@ window.__ModuleLoader__.load({
      * @returns nothing; this seat only keeps the registry in sync.
      */
     function PendingObserver({ sessionId, useChat, publish, t }) {
-      const order = useChat((snapshot) => snapshot.order);
       const nodes = useChat((snapshot) => snapshot.nodes);
-      const pending = React.useMemo(() => findPending(nodes, order), [nodes, order]);
+      // A scalar selector: it re-renders only when the pending call identity
+      // changes, while every store notification still re-evaluates it.
+      const callId = useChat((snapshot) => {
+        const root = findPendingRoot(snapshot.nodes);
+        return root === undefined ? '' : root.callId;
+      });
 
       React.useEffect(() => {
-        if (pending === undefined) return undefined;
-        const args = pending.args;
+        if (callId === '') return undefined;
+        const root = findPendingRoot(nodes);
+        if (root === undefined) return undefined;
+        const args = root.args;
         const carrier = {
-          key: `${TOOL_NAME}:${pending.callId}`,
+          key: `${TOOL_NAME}:${root.callId}`,
           kind: KIND,
           sessionId,
-          callId: pending.callId,
+          callId: root.callId,
           title: args.text('title'),
           summary: args.text('summary'),
           body: args.text('body'),
@@ -226,7 +235,7 @@ window.__ModuleLoader__.load({
         };
         const unpublish = publish(carrier, async () => {});
         return () => unpublish();
-      }, [pending, publish, sessionId, t]);
+      }, [callId, nodes, publish, sessionId, t]);
 
       return null;
     }
