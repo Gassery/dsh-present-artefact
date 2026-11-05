@@ -13,6 +13,11 @@
  *   - `ArtefactRow` keeps the transcript row honest: one compact line, no
  *     duplicate controls.
  *
+ * The card is the shipped plan review down to the pixel: the same
+ * `PlanReviewPanel` structure, the same stylesheet values, and the same
+ * primitives (Button, StateDot, chevron and pencil icons). Only the data
+ * wiring differs — this review lives in a tool call, not a user question.
+ *
  * The full text is never rendered here. Inline artefacts open the shipped
  * temporary review preview (`dsh-resource://plan-review/…` with `planReview`
  * parameters), the same `MarkdownText` pane `exit_plan_mode` uses; file
@@ -24,6 +29,11 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
+    const primitives = require('@deepseek-ai/dsh-client-ui-primitives');
+    const Button = primitives.Button;
+    const StateDot = primitives.StateDot;
+    const IconChevronRightOutlineRegular = primitives.IconChevronRightOutlineRegular;
+    const IconEditOutlineRegular = primitives.IconEditOutlineRegular;
 
     const NS = 'presentArtefact';
     const TOOL_NAME = 'present_artefact';
@@ -35,6 +45,7 @@ window.__ModuleLoader__.load({
         approve: 'Approve',
         revise: 'Request changes',
         full: 'View full text',
+        open: 'Open the artefact in the sidebar',
         approved: 'Approved.',
         revised: 'Changes requested.',
         failed: 'Could not send the answer.',
@@ -47,6 +58,7 @@ window.__ModuleLoader__.load({
         approve: '同意',
         revise: '要求修改',
         full: '查看全文',
+        open: '在侧边栏打开产物',
         approved: '已同意。',
         revised: '已要求修改。',
         failed: '提交失败。',
@@ -55,6 +67,45 @@ window.__ModuleLoader__.load({
         waiting: '等待你的评审',
       },
     };
+
+    /**
+     * The card's stylesheet, copied value for value from the shipped plan
+     * review (`dsh-client-ui-user-questions` `PlanReviewPanel.module.css`) and
+     * from the shipped `reviewLink` in `dsh-client-ui-plan`. Only the class
+     * prefix is local, so a future change to the shipped card is a diff away.
+     */
+    const CSS = [
+      '.pa_frame{padding:6px calc(var(--dsh-composer-side-clearance) + 16px) 10px;justify-content:center;display:flex}',
+      '.pa_card{width:100%;max-width:var(--dsh-chat-content-width);--dsw-elevation-stroke-color:var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-xl);background:var(--dsw-specific-input-major);box-shadow:var(--dsw-elevation-panel);color:var(--dsw-alias-label-primary);border:0;flex-direction:column;display:flex;overflow:hidden}',
+      '.pa_card,.pa_card *{box-sizing:border-box}',
+      '.pa_strip{background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-primary);flex-shrink:0;align-items:center;gap:8px;padding:12px 16px;font-size:14px;line-height:20px;display:flex}',
+      '.pa_footer{flex-shrink:0;justify-content:space-between;align-items:center;gap:12px;padding:8px 16px 12px;display:flex}',
+      '.pa_feedback{min-height:16px;color:var(--dsw-alias-state-error-primary);font-size:11px;line-height:16px}',
+      '.pa_actions{flex-shrink:0;align-items:center;gap:8px;display:flex}',
+      '.pa_summary{min-width:0;padding:14px 16px 12px}',
+      '.pa_title{text-overflow:ellipsis;white-space:nowrap;margin:0;font-size:15px;font-weight:500;line-height:22px;overflow:hidden}',
+      '.pa_description{-webkit-line-clamp:2;color:var(--dsw-alias-label-secondary);-webkit-box-orient:vertical;margin:8px 0 0;font-size:14px;line-height:24px;display:-webkit-box;overflow:hidden}',
+      '.pa_discuss{gap:6px}',
+      '.pa_previewActions{align-items:center;margin-left:auto;display:flex}',
+      '.pa_reviewLink{color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;background:0 0;border:0;align-items:center;gap:4px;padding:0;display:inline-flex}',
+      '.pa_reviewLink:hover{color:var(--dsw-alias-label-primary)}',
+      '.pa_reviewLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
+      '@media (width<=720px){.pa_card{border-radius:var(--dsw-radius-xl)}.pa_footer{align-items:flex-end;padding:8px 12px 10px}}',
+      '.pa_row{display:flex;align-items:center;gap:8px;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);padding:2px 0}',
+      '.pa_rowLink{color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;background:0 0;border:0;align-items:center;gap:4px;padding:0;display:inline-flex}',
+      '.pa_rowLink:hover{color:var(--dsw-alias-label-primary)}',
+      '.pa_rowLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
+      '.pa_rowError{color:var(--dsw-alias-state-error-primary)}',
+    ].join('');
+
+    const CSS_TAG_ID = 'dsh-present-artefact/PresentArtefact.module.css';
+    if (typeof document !== 'undefined' && document.querySelector(`style[data-plugin-css=${JSON.stringify(CSS_TAG_ID)}]`) === null) {
+      const tag = document.createElement('style');
+      tag.dataset.plugin = 'dsh-present-artefact';
+      tag.dataset.pluginCss = CSS_TAG_ID;
+      tag.textContent = CSS;
+      document.head.appendChild(tag);
+    }
 
     /** Encode one path segment, keeping `:` literal for drive letters. */
     function encodeSegment(segment) {
@@ -127,93 +178,6 @@ window.__ModuleLoader__.load({
       return found;
     }
 
-    /** Inline styles; type sizes and spacing follow the shipped review card. */
-    const styles = {
-      frame: {
-        display: 'flex',
-        justifyContent: 'center',
-        padding: '6px calc(var(--dsh-composer-side-clearance, 16px) + 16px) 10px',
-      },
-      card: {
-        width: '100%',
-        maxWidth: 'var(--dsh-composer-card-max-width, 752px)',
-        border: '1px solid var(--dsw-alias-border-l2, #3a3a3a)',
-        borderRadius: '12px',
-        background: 'var(--dsw-specific-input-major, #1f1f1f)',
-        color: 'var(--dsw-alias-label-primary, #eee)',
-        padding: '12px 14px',
-      },
-      banner: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        fontSize: '14px',
-        lineHeight: '20px',
-        color: 'var(--dsw-alias-label-secondary, #aaa)',
-        marginBottom: '8px',
-      },
-      dot: { width: '8px', height: '8px', borderRadius: '999px', background: 'var(--dsw-alias-state-warn-primary, #d8a03d)', flex: '0 0 auto' },
-      title: { margin: '0 0 6px', fontSize: '15px', lineHeight: '22px', fontWeight: 500 },
-      summary: {
-        margin: 0,
-        fontSize: '14px',
-        lineHeight: '24px',
-        color: 'var(--dsw-alias-label-secondary, #bbb)',
-        whiteSpace: 'pre-wrap',
-        overflowWrap: 'anywhere',
-      },
-      footer: { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '10px' },
-      ghost: {
-        border: '1px solid var(--dsw-alias-border-l2, #444)',
-        background: 'transparent',
-        color: 'inherit',
-        borderRadius: '8px',
-        padding: '6px 14px',
-        cursor: 'pointer',
-        fontSize: '14px',
-        lineHeight: '22px',
-      },
-      primary: {
-        border: '1px solid transparent',
-        background: 'var(--dsw-alias-state-business-primary, #4169e1)',
-        color: '#fff',
-        borderRadius: '8px',
-        padding: '6px 14px',
-        cursor: 'pointer',
-        fontSize: '14px',
-        lineHeight: '22px',
-      },
-      link: {
-        marginLeft: 'auto',
-        border: 'none',
-        background: 'transparent',
-        color: 'var(--dsw-alias-label-secondary, #aaa)',
-        cursor: 'pointer',
-        fontSize: '14px',
-        lineHeight: '20px',
-        padding: 0,
-      },
-      error: { color: 'var(--dsw-alias-state-error-primary, #e06c75)', fontSize: '14px', lineHeight: '20px', marginTop: '8px' },
-      row: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        fontSize: '14px',
-        lineHeight: '24px',
-        color: 'var(--dsw-alias-label-secondary, #aaa)',
-        padding: '2px 0',
-      },
-      rowLink: {
-        border: 'none',
-        background: 'transparent',
-        color: 'var(--dsw-alias-label-secondary, #aaa)',
-        cursor: 'pointer',
-        fontSize: '14px',
-        lineHeight: '20px',
-        padding: 0,
-      },
-    };
-
     /**
      * Publish one pending interaction per unanswered review, and withdraw it the
      * moment the call settles.
@@ -252,8 +216,23 @@ window.__ModuleLoader__.load({
       return null;
     }
 
+    /** Open the artefact's full text in the right sidebar, whichever carrier it has. */
+    function openFull(review, sessionId, openTab) {
+      if (typeof review.body === 'string' && review.body !== '') {
+        openTab(reviewAddress(sessionId, review.callId), {
+          params: { planReview: { markdown: review.body, title: review.title } },
+        });
+        return;
+      }
+      if (typeof review.path === 'string' && review.path !== '') openTab(fileAddress(sessionId, review.path));
+    }
+
     /**
      * The review card, elected into the composer seat.
+     *
+     * Mirrors the shipped plan review: warn strip with a state dot and the
+     * "view full text" link, a title over a two-line description, and the
+     * outline/primary decision pair.
      *
      * @param props - chain owner props; `matched` carries the published carrier.
      * @returns the review, or nothing when the carrier is gone.
@@ -270,12 +249,8 @@ window.__ModuleLoader__.load({
       React.useEffect(() => {
         if (autoOpened.current) return;
         autoOpened.current = true;
-        if (typeof matched.body === 'string' && matched.body !== '') {
-          openTab(reviewAddress(sessionId, matched.callId), { params: { planReview: { markdown: matched.body, title } } });
-          return;
-        }
-        if (typeof matched.path === 'string' && matched.path !== '') openTab(fileAddress(sessionId, matched.path));
-      }, [matched.callId, matched.body, matched.path, openTab, sessionId, title]);
+        openFull({ ...matched, title }, sessionId, openTab);
+      }, [matched, sessionId, openTab, title]);
 
       const answer = (decision) => {
         setBusy(true);
@@ -297,41 +272,63 @@ window.__ModuleLoader__.load({
 
       return h(
         'div',
-        { style: styles.frame },
+        { className: 'pa_frame', 'data-present-artefact': matched.callId },
         h(
-          'div',
-          { style: styles.card, 'data-present-artefact': matched.callId },
+          'section',
+          {
+            className: 'pa_card',
+            'aria-label': title,
+            'aria-busy': busy,
+          },
           h(
             'div',
-            { style: styles.banner },
-            h('span', { style: styles.dot }),
+            { className: 'pa_strip' },
+            h(StateDot, { state: busy ? 'ongoing' : 'warning' }),
             h('span', null, t('banner')),
-            (typeof matched.body === 'string' || (typeof matched.path === 'string' && matched.path !== '')) &&
+            h(
+              'div',
+              { className: 'pa_previewActions' },
               h(
                 'button',
                 {
                   type: 'button',
-                  style: styles.link,
-                  onClick: () => {
-                    if (typeof matched.body === 'string' && matched.body !== '') {
-                      openTab(reviewAddress(sessionId, matched.callId), { params: { planReview: { markdown: matched.body, title } } });
-                      return;
-                    }
-                    if (typeof matched.path === 'string' && matched.path !== '') openTab(fileAddress(sessionId, matched.path));
-                  },
+                  className: 'pa_reviewLink',
+                  title: t('open'),
+                  'aria-label': t('open'),
+                  onClick: () => openFull({ ...matched, title }, sessionId, openTab),
                 },
-                `${t('full')} ›`,
+                t('full'),
+                h(IconChevronRightOutlineRegular, { size: 14 }),
               ),
+            ),
           ),
-          h('h3', { style: styles.title }, title),
-          summary !== '' && h('p', { style: styles.summary }, summary),
           h(
             'div',
-            { style: styles.footer },
-            h('button', { type: 'button', style: styles.ghost, disabled: busy, onClick: () => answer('revise') }, t('revise')),
-            h('button', { type: 'button', style: styles.primary, disabled: busy, onClick: () => answer('agree') }, t('approve')),
+            { className: 'pa_summary' },
+            h('h3', { className: 'pa_title' }, title),
+            summary !== '' && h('p', { className: 'pa_description' }, summary),
           ),
-          error !== null && h('div', { style: styles.error }, error),
+          h(
+            'div',
+            { className: 'pa_footer' },
+            h('div', { className: 'pa_feedback', role: 'status' }, error),
+            h(
+              'div',
+              { className: 'pa_actions' },
+              h(
+                Button,
+                {
+                  variant: 'outline',
+                  className: 'pa_discuss',
+                  icon: h(IconEditOutlineRegular, { size: 14 }),
+                  disabled: busy,
+                  onClick: () => answer('revise'),
+                },
+                t('revise'),
+              ),
+              h(Button, { variant: 'primary', disabled: busy, onClick: () => answer('agree') }, t('approve')),
+            ),
+          ),
         ),
       );
     }
@@ -369,23 +366,25 @@ window.__ModuleLoader__.load({
      * @returns the row, or nothing before the call is dispatched.
      */
     function ArtefactRow({ phase, block, sessionId, t, openTab }) {
-      if (phase === 'preparing') return h('div', { style: styles.row }, t('pending'));
-      if (phase === 'start') return h('div', { style: styles.row }, t('waiting'));
+      if (phase === 'preparing') return h('div', { className: 'pa_row' }, t('pending'));
+      if (phase === 'start') return h('div', { className: 'pa_row' }, t('waiting'));
       const decision = decisionOf(resultText(block));
-      const outcome = decision === 'agree' ? t('approved') : decision === 'revise' ? t('revised') : block.isError === true ? t('failed') : resultText(block);
+      const failed = block.isError === true;
+      const outcome = decision === 'agree' ? t('approved') : decision === 'revise' ? t('revised') : failed ? t('failed') : resultText(block);
       const title = block === undefined || block.args === undefined ? undefined : block.args.text('title');
       return h(
         'div',
-        { style: styles.row },
-        h('span', null, outcome),
+        { className: 'pa_row' },
+        h('span', failed ? { className: 'pa_rowError' } : null, outcome),
         h(
           'button',
           {
             type: 'button',
-            style: styles.rowLink,
+            className: 'pa_rowLink',
             onClick: () => openArtefact(block.args, block.callId, sessionId, openTab, title),
           },
-          `${t('full')} ›`,
+          t('full'),
+          h(IconChevronRightOutlineRegular, { size: 14 }),
         ),
       );
     }
