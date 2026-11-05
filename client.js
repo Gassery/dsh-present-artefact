@@ -34,6 +34,8 @@ window.__ModuleLoader__.load({
     const StateDot = primitives.StateDot;
     const IconChevronRightOutlineRegular = primitives.IconChevronRightOutlineRegular;
     const IconEditOutlineRegular = primitives.IconEditOutlineRegular;
+    const FileTypeIcon = primitives.FileTypeIcon;
+    const classifyFileType = primitives.classifyFileType;
 
     const NS = 'presentArtefact';
     const TOOL_NAME = 'present_artefact';
@@ -45,7 +47,9 @@ window.__ModuleLoader__.load({
         approve: 'Approve',
         revise: 'Request changes',
         full: 'View full text',
-        open: 'Open the artefact in the sidebar',
+        open: 'Open',
+        openAria: 'Open the artefact in the sidebar',
+        file: 'File',
         approved: 'Approved.',
         revised: 'Changes requested.',
         failed: 'Could not send the answer.',
@@ -58,7 +62,9 @@ window.__ModuleLoader__.load({
         approve: '同意',
         revise: '要求修改',
         full: '查看全文',
-        open: '在侧边栏打开产物',
+        open: '打开',
+        openAria: '在侧边栏打开产物',
+        file: '文件',
         approved: '已同意。',
         revised: '已要求修改。',
         failed: '提交失败。',
@@ -92,10 +98,18 @@ window.__ModuleLoader__.load({
       '.pa_reviewLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
       '@media (width<=720px){.pa_card{border-radius:var(--dsw-radius-xl)}.pa_footer{align-items:flex-end;padding:8px 12px 10px}}',
       '.pa_row{display:flex;align-items:center;gap:8px;font-size:var(--dsh-content-font-size-secondary,13px);line-height:calc(20px + var(--dsh-content-font-delta-secondary,0px));color:var(--dsw-alias-label-tertiary);padding:2px 0}',
-      '.pa_rowLink{color:var(--dsw-alias-label-secondary);font:inherit;cursor:pointer;background:0 0;border:0;align-items:center;gap:4px;padding:0;display:inline-flex}',
-      '.pa_rowLink:hover{color:var(--dsw-alias-label-primary)}',
-      '.pa_rowLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
       '.pa_rowError{color:var(--dsw-alias-state-error-primary)}',
+      '.pa_records{flex-direction:column;gap:10px;display:flex}',
+      '.pa_record{--pa-record-fill:var(--dsw-static-neutral-50);--pa-record-hover:var(--dsw-static-neutral-100);box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);background:var(--pa-record-fill);width:100%;min-width:0;height:60px;color:var(--dsw-alias-label-primary);font:inherit;text-align:left;cursor:pointer;align-items:center;gap:10px;margin:0;padding:8px 10px;transition:background-color .12s;display:flex}',
+      'body[data-ds-dark-theme] .pa_record{--pa-record-fill:var(--dsw-static-neutral-850);--pa-record-hover:var(--dsw-static-neutral-800)}',
+      '.pa_record:hover{background:var(--pa-record-hover)}',
+      '.pa_record:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
+      '.pa_recordIcon{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l1);background:color-mix(in srgb, var(--dsw-static-neutral-00) 50%, transparent);border-radius:10px;flex:none;place-items:center;width:40px;height:40px;display:grid}',
+      'body[data-ds-dark-theme] .pa_recordIcon{background:color-mix(in srgb, var(--dsw-static-neutral-00) 5%, transparent)}',
+      '.pa_recordDetails{flex-direction:column;flex:1;gap:2px;min-width:0;display:flex}',
+      '.pa_recordTitle{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}',
+      '.pa_recordDescription{text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden}',
+      '.pa_recordOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}',
     ].join('');
 
     const CSS_TAG_ID = 'dsh-present-artefact/PresentArtefact.module.css';
@@ -293,8 +307,8 @@ window.__ModuleLoader__.load({
                 {
                   type: 'button',
                   className: 'pa_reviewLink',
-                  title: t('open'),
-                  'aria-label': t('open'),
+                  title: t('openAria'),
+                  'aria-label': t('openAria'),
                   onClick: () => openFull({ ...matched, title }, sessionId, openTab),
                 },
                 t('full'),
@@ -357,13 +371,66 @@ window.__ModuleLoader__.load({
       return false;
     }
 
+    /** Last path segment of a `path` argument, for the icon and the type label. */
+    function basenameOf(path) {
+      const normalized = typeof path === 'string' ? path.replace(/\\/g, '/') : '';
+      return normalized.slice(normalized.lastIndexOf('/') + 1);
+    }
+
+    /** Upper-cased extension, or the localized word for a file without one. */
+    function typeLabelOf(name, t) {
+      const dot = name.lastIndexOf('.');
+      return dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toUpperCase() : t('file');
+    }
+
     /**
-     * One compact transcript line: the pending state, then the recorded outcome
-     * plus a way back into the full text. The actionable card lives in the
-     * composer, not here.
+     * The settled artefact as the shipped plan card shows a submitted plan: a
+     * file-type icon, the title over a short type line, and one open control.
+     *
+     * @param props - the settled call block, its Session, and navigation.
+     * @returns the card list, or nothing when the call carries no artefact.
+     */
+    function ArtefactCard({ block, sessionId, t, openTab }) {
+      const args = block === undefined ? undefined : block.args;
+      const body = args === undefined ? undefined : args.text('body');
+      const path = args === undefined ? undefined : args.text('path');
+      const hasBody = typeof body === 'string' && body !== '';
+      const hasPath = typeof path === 'string' && path !== '';
+      if (!hasBody && !hasPath) return null;
+      const title = (args.text('title') === undefined || args.text('title') === '' ? undefined : args.text('title')) ?? t('artefact');
+      const name = hasBody ? '' : basenameOf(path);
+      const kind = hasBody ? 'markdown' : classifyFileType(name);
+      const label = hasBody ? 'Markdown' : typeLabelOf(name, t);
+      return h(
+        'div',
+        { className: 'pa_records', 'data-artefact-cards': true },
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'pa_record',
+            'data-artefact-card': block.callId,
+            'aria-label': `${t('banner')}: ${title}`,
+            onClick: () => openArtefact(args, block.callId, sessionId, openTab, title),
+          },
+          h('span', { className: 'pa_recordIcon' }, h(FileTypeIcon, { kind, size: 20 })),
+          h(
+            'span',
+            { className: 'pa_recordDetails' },
+            h('span', { className: 'pa_recordTitle' }, title),
+            h('span', { className: 'pa_recordDescription' }, `${t('artefact')} · ${label}`),
+          ),
+          h('span', { className: 'pa_recordOpen' }, t('open')),
+        ),
+      );
+    }
+
+    /**
+     * The transcript row: the pending state while the review is open, then the
+     * recorded outcome over the settled artefact card.
      *
      * @param props - tool view owner props.
-     * @returns the row, or nothing before the call is dispatched.
+     * @returns the row and card, or nothing before the call is dispatched.
      */
     function ArtefactRow({ phase, block, sessionId, t, openTab }) {
       if (phase === 'preparing') return h('div', { className: 'pa_row' }, t('pending'));
@@ -371,21 +438,11 @@ window.__ModuleLoader__.load({
       const decision = decisionOf(resultText(block));
       const failed = block.isError === true;
       const outcome = decision === 'agree' ? t('approved') : decision === 'revise' ? t('revised') : failed ? t('failed') : resultText(block);
-      const title = block === undefined || block.args === undefined ? undefined : block.args.text('title');
       return h(
         'div',
-        { className: 'pa_row' },
-        h('span', failed ? { className: 'pa_rowError' } : null, outcome),
-        h(
-          'button',
-          {
-            type: 'button',
-            className: 'pa_rowLink',
-            onClick: () => openArtefact(block.args, block.callId, sessionId, openTab, title),
-          },
-          t('full'),
-          h(IconChevronRightOutlineRegular, { size: 14 }),
-        ),
+        null,
+        h('div', { className: 'pa_row' }, h('span', failed ? { className: 'pa_rowError' } : null, outcome)),
+        h(ArtefactCard, { block, sessionId, t, openTab }),
       );
     }
 

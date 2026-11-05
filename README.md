@@ -9,7 +9,8 @@ It behaves like the shipped plan review, on purpose:
 - the review **takes over the composer** (the input box) instead of sitting in
   the transcript;
 - the full text **opens by itself** in the right sidebar when the card appears;
-- the transcript keeps one compact line, with a link back into the full text.
+- the transcript keeps one card, the same card the shipped plan review uses,
+  and it opens the full text again.
 
 Inline artefacts never touch the filesystem: the body travels in the tool
 call's arguments and the session log, so the review works under a read-only
