@@ -496,6 +496,7 @@ window.__ModuleLoader__.load({
     function ArtefactPane({ sessionId, useChat, t, openTab }) {
       const [entries, setEntries] = React.useState(null);
       const [failed, setFailed] = React.useState(false);
+      const [detail, setDetail] = React.useState('');
       // The transcript window decides nothing here; its artefact count only tells
       // the pane when a new call may have landed, so the list refetches.
       const seen = useChat((snapshot) => {
@@ -516,15 +517,17 @@ window.__ModuleLoader__.load({
             setEntries(Array.isArray(value.entries) ? value.entries : []);
             setFailed(false);
           })
-          .catch(() => {
-            if (live) setFailed(true);
+          .catch((error) => {
+            if (!live) return;
+            setFailed(true);
+            setDetail(String(error?.message ?? error));
           });
         return () => {
           live = false;
         };
       }, [sessionId, seen]);
 
-      if (failed) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, t('loadFailed')));
+      if (failed) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, `${t('loadFailed')} (${detail})`));
       if (entries === null) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, t('loading')));
       if (entries.length === 0) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, t('empty')));
       return h(

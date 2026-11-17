@@ -115,6 +115,7 @@ export function apply(ctx) {
 	ctx.effect(() => ctx.connection.fetch.register({
 		path: LIST_ROUTE,
 		methods: ['GET'],
+		requestBody: 'buffered',
 		fetch: async (request) => {
 			const sessionId = new URL(request.url).searchParams.get('sessionId') ?? '';
 			if (sessionId === '') return Response.json({ ok: false, error: 'missing-session' }, { status: 400 });
