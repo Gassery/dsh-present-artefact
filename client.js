@@ -61,9 +61,10 @@ window.__ModuleLoader__.load({
         tab: 'Artefacts',
         guide: 'Review the artefacts this session produced.',
         empty: 'No artefacts in this session yet.',
-        latest: 'Latest',
         loading: 'Loading…',
         loadFailed: 'Could not load the artefacts.',
+        turn: 'Turn {turn}',
+        step: 'Step {step}',
       },
       zh: {
         banner: '产物待审',
@@ -82,9 +83,10 @@ window.__ModuleLoader__.load({
         tab: '产物',
         guide: '查看本会话生成过的产物。',
         empty: '本会话还没有产物。',
-        latest: '最新',
         loading: '加载中…',
         loadFailed: '无法加载产物列表。',
+        turn: '第 {turn} 轮',
+        step: '第 {step} 步',
       },
     };
 
@@ -398,6 +400,32 @@ window.__ModuleLoader__.load({
       return dot > 0 && dot < name.length - 1 ? name.slice(dot + 1).toUpperCase() : t('file');
     }
 
+    /** Local date and time of one call, as compactly as the browser allows. */
+    function formatWhen(time) {
+      try {
+        return new Intl.DateTimeFormat(undefined, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }).format(new Date(time));
+      } catch {
+        return '';
+      }
+    }
+
+    /** The pane's second line: the turn, the step, and when it ran. */
+    function artefactMeta(entry, t) {
+      const parts = [];
+      if (typeof entry.turn === 'number') parts.push(t('turn', { turn: entry.turn }));
+      if (typeof entry.step === 'number') parts.push(t('step', { step: entry.step }));
+      if (typeof entry.time === 'number') {
+        const when = formatWhen(entry.time);
+        if (when !== '') parts.push(when);
+      }
+      return parts.join(' · ');
+    }
+
     /**
      * One artefact row: a file-type icon, the title over a short type line, and
      * one open control. Shared by the transcript card and the sidebar pane.
@@ -405,11 +433,10 @@ window.__ModuleLoader__.load({
      * @param props - the collected artefact, its Session, and navigation.
      * @returns the row button.
      */
-    function ArtefactRecord({ entry, sessionId, t, openTab, latest }) {
+    function ArtefactRecord({ entry, sessionId, t, openTab, meta }) {
       const hasBody = typeof entry.body === 'string' && entry.body !== '';
       const name = hasBody ? '' : basenameOf(entry.path);
       const kind = hasBody ? 'markdown' : classifyFileType(name);
-      const label = hasBody ? 'Markdown' : typeLabelOf(name, t);
       const title = typeof entry.title === 'string' && entry.title !== '' ? entry.title : t('artefact');
       return h(
         'button',
@@ -425,7 +452,7 @@ window.__ModuleLoader__.load({
           'span',
           { className: 'pa_recordDetails' },
           h('span', { className: 'pa_recordTitle' }, title),
-          h('span', { className: 'pa_recordDescription' }, latest === true ? `${t('latest')} · ${label}` : `${t('artefact')} · ${label}`),
+          h('span', { className: 'pa_recordDescription' }, meta),
         ),
         h('span', { className: 'pa_recordOpen' }, t('open')),
       );
@@ -452,7 +479,11 @@ window.__ModuleLoader__.load({
         body: hasBody ? body : undefined,
         path: hasPath ? path : undefined,
       };
-      return h('div', { className: 'pa_records', 'data-artefact-cards': true }, h(ArtefactRecord, { entry, sessionId, t, openTab }));
+      return h(
+        'div',
+        { className: 'pa_records', 'data-artefact-cards': true },
+        h(ArtefactRecord, { entry, sessionId, t, openTab, meta: `${t('artefact')} · ${hasBody ? 'Markdown' : typeLabelOf(basenameOf(path), t)}` }),
+      );
     }
 
     /**
@@ -502,7 +533,7 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'pa_records' },
-          entries.map((entry, index) => h(ArtefactRecord, { key: entry.callId, entry, sessionId, t, openTab, latest: index === 0 })),
+          entries.map((entry) => h(ArtefactRecord, { key: entry.callId, entry, sessionId, t, openTab, meta: artefactMeta(entry, t) })),
         ),
       );
     }

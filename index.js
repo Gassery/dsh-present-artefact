@@ -136,6 +136,8 @@ export function apply(ctx) {
 				if (body === '' && path === '') continue;
 				entries.push({
 					callId: String(event.data.callId),
+					turn: event.data.turn,
+					step: event.data.step,
 					time: event.time,
 					...(title === '' ? {} : { title }),
 					...(body === '' ? { path } : { body }),
