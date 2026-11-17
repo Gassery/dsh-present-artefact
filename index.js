@@ -23,6 +23,8 @@
 const TOOL_NAME = 'present_artefact';
 /** The answer route below `/api`; routes register the full shared-channel path. */
 const ANSWER_ROUTE = '/api/present-artefact/answer';
+/** The session artefact list route below `/api`. */
+const LIST_ROUTE = '/api/present-artefact/list';
 
 /** Decisions as machine values; the card renders its own localized labels. */
 const AGREE = 'agree';
@@ -105,6 +107,44 @@ export function apply(ctx) {
 			return Response.json({ ok: true });
 		},
 	}, 'present-artefact: answer route'));
+
+	// The Client cannot list every artefact from its transcript window: the Chat
+	// and Trajectory views only materialize the events they loaded. This route
+	// answers from the live Session's own log, so the list is complete however
+	// far back the call happened.
+	ctx.effect(() => ctx.connection.fetch.register({
+		path: LIST_ROUTE,
+		methods: ['GET'],
+		fetch: async (request) => {
+			const sessionId = new URL(request.url).searchParams.get('sessionId') ?? '';
+			if (sessionId === '') return Response.json({ ok: false, error: 'missing-session' }, { status: 400 });
+			const sessions = ctx.get('sessions');
+			const session = sessions === undefined ? undefined : sessions.get(sessionId);
+			if (session === undefined) return Response.json({ ok: false, error: 'unknown-session' }, { status: 404 });
+			const entries = [];
+			for (const event of session.snapshotEvents()) {
+				if (event.type !== 'tool/call' || event.data.name !== TOOL_NAME) continue;
+				let args;
+				try {
+					args = JSON.parse(event.data.arguments);
+				} catch {
+					continue;
+				}
+				const title = typeof args?.title === 'string' ? args.title.trim() : '';
+				const body = typeof args?.body === 'string' ? args.body : '';
+				const path = typeof args?.path === 'string' ? args.path : '';
+				if (body === '' && path === '') continue;
+				entries.push({
+					callId: String(event.data.callId),
+					time: event.time,
+					...(title === '' ? {} : { title }),
+					...(body === '' ? { path } : { body }),
+				});
+			}
+			entries.reverse();
+			return Response.json({ ok: true, entries });
+		},
+	}, 'present-artefact: list route'));
 
 	ctx.tools.register({
 		name: TOOL_NAME,

@@ -62,6 +62,8 @@ window.__ModuleLoader__.load({
         guide: 'Review the artefacts this session produced.',
         empty: 'No artefacts in this session yet.',
         latest: 'Latest',
+        loading: 'Loading…',
+        loadFailed: 'Could not load the artefacts.',
       },
       zh: {
         banner: '产物待审',
@@ -81,6 +83,8 @@ window.__ModuleLoader__.load({
         guide: '查看本会话生成过的产物。',
         empty: '本会话还没有产物。',
         latest: '最新',
+        loading: '加载中…',
+        loadFailed: '无法加载产物列表。',
       },
     };
 
@@ -201,36 +205,6 @@ window.__ModuleLoader__.load({
         anchor = typeof node.anchorSeq === 'number' ? node.anchorSeq : anchor;
         found = root;
       }
-      return found;
-    }
-
-    /**
-     * Every `present_artefact` call in the Session, newest first.
-     *
-     * @param nodes - Chat node store.
-     * @returns collected artefacts, one per usable call.
-     */
-    function collectArtefacts(nodes) {
-      const found = [];
-      for (const node of nodes.values()) {
-        if (node === null || node.kind !== 'tool-call') continue;
-        const root = node.data === undefined ? undefined : node.data.root;
-        if (root === undefined || root.name !== TOOL_NAME || root.args === undefined) continue;
-        const body = root.args.text('body');
-        const path = root.args.text('path');
-        const hasBody = typeof body === 'string' && body !== '';
-        const hasPath = typeof path === 'string' && path !== '';
-        if (!hasBody && !hasPath) continue;
-        const rawTitle = root.args.text('title');
-        found.push({
-          callId: root.callId,
-          title: typeof rawTitle === 'string' && rawTitle !== '' ? rawTitle : undefined,
-          body: hasBody ? body : undefined,
-          path: hasPath ? path : undefined,
-          anchorSeq: typeof node.anchorSeq === 'number' ? node.anchorSeq : -1,
-        });
-      }
-      found.sort((left, right) => right.anchorSeq - left.anchorSeq);
       return found;
     }
 
@@ -489,8 +463,38 @@ window.__ModuleLoader__.load({
      * @returns the list, or its empty state.
      */
     function ArtefactPane({ sessionId, useChat, t, openTab }) {
-      const nodes = useChat((snapshot) => snapshot.nodes);
-      const entries = React.useMemo(() => collectArtefacts(nodes), [nodes]);
+      const [entries, setEntries] = React.useState(null);
+      const [failed, setFailed] = React.useState(false);
+      // The transcript window decides nothing here; its artefact count only tells
+      // the pane when a new call may have landed, so the list refetches.
+      const seen = useChat((snapshot) => {
+        let total = 0;
+        for (const node of snapshot.nodes.values()) {
+          if (node !== null && node.kind === 'tool-call' && node.data !== undefined && node.data.root !== undefined && node.data.root.name === TOOL_NAME) total += 1;
+        }
+        return total;
+      });
+
+      React.useEffect(() => {
+        let live = true;
+        fetch(`api/present-artefact/list?sessionId=${encodeURIComponent(sessionId)}`)
+          .then(async (response) => {
+            const value = await response.json().catch(() => ({}));
+            if (!response.ok || value.ok !== true) throw new Error(value.error ?? String(response.status));
+            if (!live) return;
+            setEntries(Array.isArray(value.entries) ? value.entries : []);
+            setFailed(false);
+          })
+          .catch(() => {
+            if (live) setFailed(true);
+          });
+        return () => {
+          live = false;
+        };
+      }, [sessionId, seen]);
+
+      if (failed) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, t('loadFailed')));
+      if (entries === null) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, t('loading')));
       if (entries.length === 0) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, t('empty')));
       return h(
         'div',
