@@ -40,6 +40,8 @@ window.__ModuleLoader__.load({
     const NS = 'presentArtefact';
     const TOOL_NAME = 'present_artefact';
     const KIND = 'artefact-review';
+    /** The right sidebar tab type: its guide card, its pane, and its title. */
+    const TAB_ID = 'dsh-present-artefact';
 
     const DICT = {
       en: {
@@ -56,6 +58,10 @@ window.__ModuleLoader__.load({
         artefact: 'Artefact',
         pending: 'Preparing the artefact…',
         waiting: 'Waiting for your review',
+        tab: 'Artefacts',
+        guide: 'Review the artefacts this session produced.',
+        empty: 'No artefacts in this session yet.',
+        latest: 'Latest',
       },
       zh: {
         banner: '产物待审',
@@ -71,6 +77,10 @@ window.__ModuleLoader__.load({
         artefact: '产物',
         pending: '产物准备中…',
         waiting: '等待你的评审',
+        tab: '产物',
+        guide: '查看本会话生成过的产物。',
+        empty: '本会话还没有产物。',
+        latest: '最新',
       },
     };
 
@@ -110,6 +120,8 @@ window.__ModuleLoader__.load({
       '.pa_recordTitle{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}',
       '.pa_recordDescription{text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden}',
       '.pa_recordOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}',
+      '.pa_pane{box-sizing:border-box;flex-direction:column;width:100%;height:100%;padding:12px 14px;display:flex;overflow:auto}',
+      '.pa_paneEmpty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;padding:8px 2px}',
     ].join('');
 
     const CSS_TAG_ID = 'dsh-present-artefact/PresentArtefact.module.css';
@@ -189,6 +201,36 @@ window.__ModuleLoader__.load({
         anchor = typeof node.anchorSeq === 'number' ? node.anchorSeq : anchor;
         found = root;
       }
+      return found;
+    }
+
+    /**
+     * Every `present_artefact` call in the Session, newest first.
+     *
+     * @param nodes - Chat node store.
+     * @returns collected artefacts, one per usable call.
+     */
+    function collectArtefacts(nodes) {
+      const found = [];
+      for (const node of nodes.values()) {
+        if (node === null || node.kind !== 'tool-call') continue;
+        const root = node.data === undefined ? undefined : node.data.root;
+        if (root === undefined || root.name !== TOOL_NAME || root.args === undefined) continue;
+        const body = root.args.text('body');
+        const path = root.args.text('path');
+        const hasBody = typeof body === 'string' && body !== '';
+        const hasPath = typeof path === 'string' && path !== '';
+        if (!hasBody && !hasPath) continue;
+        const rawTitle = root.args.text('title');
+        found.push({
+          callId: root.callId,
+          title: typeof rawTitle === 'string' && rawTitle !== '' ? rawTitle : undefined,
+          body: hasBody ? body : undefined,
+          path: hasPath ? path : undefined,
+          anchorSeq: typeof node.anchorSeq === 'number' ? node.anchorSeq : -1,
+        });
+      }
+      found.sort((left, right) => right.anchorSeq - left.anchorSeq);
       return found;
     }
 
@@ -357,15 +399,14 @@ window.__ModuleLoader__.load({
      * @param title - artefact title.
      * @returns whether anything opened.
      */
-    function openArtefact(args, callId, sessionId, openTab, title) {
-      const body = args === undefined ? undefined : args.text('body');
-      if (typeof body === 'string' && body !== '') {
-        openTab(reviewAddress(sessionId, callId), { params: { planReview: { markdown: body, title: title ?? '' } } });
+    /** Open one collected artefact, whichever carrier it has. */
+    function openEntry(entry, sessionId, openTab, title) {
+      if (typeof entry.body === 'string' && entry.body !== '') {
+        openTab(reviewAddress(sessionId, entry.callId), { params: { planReview: { markdown: entry.body, title: title ?? '' } } });
         return true;
       }
-      const path = args === undefined ? undefined : args.text('path');
-      if (typeof path === 'string' && path !== '') {
-        openTab(fileAddress(sessionId, path));
+      if (typeof entry.path === 'string' && entry.path !== '') {
+        openTab(fileAddress(sessionId, entry.path));
         return true;
       }
       return false;
@@ -384,45 +425,87 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * The settled artefact as the shipped plan card shows a submitted plan: a
-     * file-type icon, the title over a short type line, and one open control.
+     * One artefact row: a file-type icon, the title over a short type line, and
+     * one open control. Shared by the transcript card and the sidebar pane.
+     *
+     * @param props - the collected artefact, its Session, and navigation.
+     * @returns the row button.
+     */
+    function ArtefactRecord({ entry, sessionId, t, openTab, latest }) {
+      const hasBody = typeof entry.body === 'string' && entry.body !== '';
+      const name = hasBody ? '' : basenameOf(entry.path);
+      const kind = hasBody ? 'markdown' : classifyFileType(name);
+      const label = hasBody ? 'Markdown' : typeLabelOf(name, t);
+      const title = typeof entry.title === 'string' && entry.title !== '' ? entry.title : t('artefact');
+      return h(
+        'button',
+        {
+          type: 'button',
+          className: 'pa_record',
+          'data-artefact-card': entry.callId,
+          'aria-label': `${t('banner')}: ${title}`,
+          onClick: () => openEntry(entry, sessionId, openTab, title),
+        },
+        h('span', { className: 'pa_recordIcon' }, h(FileTypeIcon, { kind, size: 20 })),
+        h(
+          'span',
+          { className: 'pa_recordDetails' },
+          h('span', { className: 'pa_recordTitle' }, title),
+          h('span', { className: 'pa_recordDescription' }, latest === true ? `${t('latest')} · ${label}` : `${t('artefact')} · ${label}`),
+        ),
+        h('span', { className: 'pa_recordOpen' }, t('open')),
+      );
+    }
+
+    /**
+     * The settled artefact as the shipped plan card shows a submitted plan.
      *
      * @param props - the settled call block, its Session, and navigation.
      * @returns the card list, or nothing when the call carries no artefact.
      */
     function ArtefactCard({ block, sessionId, t, openTab }) {
-      const args = block === undefined ? undefined : block.args;
+      if (block === undefined) return null;
+      const args = block.args;
       const body = args === undefined ? undefined : args.text('body');
       const path = args === undefined ? undefined : args.text('path');
       const hasBody = typeof body === 'string' && body !== '';
       const hasPath = typeof path === 'string' && path !== '';
       if (!hasBody && !hasPath) return null;
-      const title = (args.text('title') === undefined || args.text('title') === '' ? undefined : args.text('title')) ?? t('artefact');
-      const name = hasBody ? '' : basenameOf(path);
-      const kind = hasBody ? 'markdown' : classifyFileType(name);
-      const label = hasBody ? 'Markdown' : typeLabelOf(name, t);
+      const rawTitle = args.text('title');
+      const entry = {
+        callId: block.callId,
+        title: typeof rawTitle === 'string' && rawTitle !== '' ? rawTitle : undefined,
+        body: hasBody ? body : undefined,
+        path: hasPath ? path : undefined,
+      };
+      return h('div', { className: 'pa_records', 'data-artefact-cards': true }, h(ArtefactRecord, { entry, sessionId, t, openTab }));
+    }
+
+    /**
+     * The right sidebar pane: every artefact this Session produced, newest
+     * first, so the latest one is the first row.
+     *
+     * @param props - tab slot props: `sessionId`, `useChat`, translator, navigation.
+     * @returns the list, or its empty state.
+     */
+    function ArtefactPane({ sessionId, useChat, t, openTab }) {
+      const nodes = useChat((snapshot) => snapshot.nodes);
+      const entries = React.useMemo(() => collectArtefacts(nodes), [nodes]);
+      if (entries.length === 0) return h('div', { className: 'pa_pane' }, h('p', { className: 'pa_paneEmpty' }, t('empty')));
       return h(
         'div',
-        { className: 'pa_records', 'data-artefact-cards': true },
+        { className: 'pa_pane', 'data-artefact-pane': true },
         h(
-          'button',
-          {
-            type: 'button',
-            className: 'pa_record',
-            'data-artefact-card': block.callId,
-            'aria-label': `${t('banner')}: ${title}`,
-            onClick: () => openArtefact(args, block.callId, sessionId, openTab, title),
-          },
-          h('span', { className: 'pa_recordIcon' }, h(FileTypeIcon, { kind, size: 20 })),
-          h(
-            'span',
-            { className: 'pa_recordDetails' },
-            h('span', { className: 'pa_recordTitle' }, title),
-            h('span', { className: 'pa_recordDescription' }, `${t('artefact')} · ${label}`),
-          ),
-          h('span', { className: 'pa_recordOpen' }, t('open')),
+          'div',
+          { className: 'pa_records' },
+          entries.map((entry, index) => h(ArtefactRecord, { key: entry.callId, entry, sessionId, t, openTab, latest: index === 0 })),
         ),
       );
+    }
+
+    /** The sidebar tab chip's title. */
+    function ArtefactPaneTitle({ t }) {
+      return h('span', null, t('tab'));
     }
 
     /**
@@ -459,6 +542,44 @@ window.__ModuleLoader__.load({
         }, 'present-artefact: dictionaries');
         const t = ctx.locale.bind(NS);
         const openTab = (address, options) => ctx.sidebarRight.openResource(address, options);
+
+        // The right sidebar carries the artefact list: one tab type whose guide
+        // card is the entry and whose pane is the history. The transcript stays
+        // as it is.
+        let tabFiber;
+        ctx.effect(() => {
+          tabFiber = ctx.inject(['sidebarRightTabs'], (actx) => {
+            const disposers = [
+              actx.sidebarRightTabs.register({
+                id: TAB_ID,
+                kind: TAB_ID,
+                title: () => t('tab'),
+                guide: [
+                  {
+                    id: 'list',
+                    order: 30,
+                    title: () => t('tab'),
+                    description: () => t('guide'),
+                    icon: primitives.PluginArtworkDefault,
+                  },
+                ],
+              }),
+              actx.slots.inject('sidebar.right.pane.tab', () =>
+                actx.slots.register({ name: 'sidebar.right.pane.tab', key: TAB_ID, locale: NS }, (props) => h(ArtefactPane, { ...props, openTab, t })),
+              ),
+              actx.slots.inject('sidebar.right.pane.tab.title', () =>
+                actx.slots.register({ name: 'sidebar.right.pane.tab.title', key: TAB_ID, locale: NS }, (props) => h(ArtefactPaneTitle, { ...props, t })),
+              ),
+            ];
+            return () => {
+              for (const dispose of disposers.reverse()) dispose();
+            };
+          });
+          return () => {
+            tabFiber?.dispose?.();
+            tabFiber = undefined;
+          };
+        }, 'present-artefact: sidebar tab');
 
         const publish = ctx.uiSession.registerPendingInteraction((interaction) => (interaction.kind === KIND ? 3 : -1));
 
