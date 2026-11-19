@@ -32,6 +32,9 @@ window.__ModuleLoader__.load({
     const primitives = require('@deepseek-ai/dsh-client-ui-primitives');
     const Button = primitives.Button;
     const StateDot = primitives.StateDot;
+    const DiffBlock = primitives.DiffBlock;
+    const MarkdownText = primitives.MarkdownText;
+    const TerminalBlock = primitives.TerminalBlock;
     const IconChevronRightOutlineRegular = primitives.IconChevronRightOutlineRegular;
     const IconEditOutlineRegular = primitives.IconEditOutlineRegular;
     const FileTypeIcon = primitives.FileTypeIcon;
@@ -77,6 +80,33 @@ window.__ModuleLoader__.load({
         'label.content': 'content',
         'label.diff': 'diff',
         'label.arguments': 'arguments',
+        'diff.copy': 'Copy',
+        'diff.copied': 'Copied',
+        'diff.codeLabel': 'Diff',
+        'diff.wrap': 'Wrap lines',
+        'diff.unwrap': 'No wrap',
+        'diff.collapse': 'Collapse',
+        'diff.collapseAria': 'Collapse the diff',
+        'diff.expand': 'Show {count} more lines',
+        'diff.expandAria': 'Show {count} more lines',
+        'copy': 'Copy',
+        'copied': 'Copied',
+        'collapse': 'Collapse',
+        'code.title': 'Code',
+        'code.wrap': 'Wrap lines',
+        'code.unwrap': 'No wrap',
+        'markdown.footnotes': 'Footnotes',
+        'terminal.commandLine': 'Line {n}',
+        'terminal.signal': 'Signal {signal}',
+        'terminal.exitCode': 'Exit code {code}',
+        'terminal.noExitCode': 'No exit code',
+        'terminal.running': 'Running',
+        'terminal.failed': 'Failed',
+        'terminal.done': 'Done',
+        'terminal.noOutput': 'No output',
+        'terminal.collapseAria': 'Collapse the output',
+        'terminal.expandAria': 'Show {n} more lines',
+        'terminal.expandRest': 'Show {n} more lines',
       },
       zh: {
         banner: '产物待审',
@@ -107,6 +137,33 @@ window.__ModuleLoader__.load({
         'label.content': '内容',
         'label.diff': '差异',
         'label.arguments': '参数',
+        'diff.copy': '复制',
+        'diff.copied': '已复制',
+        'diff.codeLabel': '差异',
+        'diff.wrap': '自动换行',
+        'diff.unwrap': '不换行',
+        'diff.collapse': '收起',
+        'diff.collapseAria': '收起差异',
+        'diff.expand': '展开其余 {count} 行',
+        'diff.expandAria': '展开其余 {count} 行',
+        'copy': '复制',
+        'copied': '已复制',
+        'collapse': '收起',
+        'code.title': '代码',
+        'code.wrap': '自动换行',
+        'code.unwrap': '不换行',
+        'markdown.footnotes': '脚注',
+        'terminal.commandLine': '第 {n} 行',
+        'terminal.signal': '信号 {signal}',
+        'terminal.exitCode': '退出码 {code}',
+        'terminal.noExitCode': '没有退出码',
+        'terminal.running': '执行中',
+        'terminal.failed': '失败',
+        'terminal.done': '完成',
+        'terminal.noOutput': '没有输出',
+        'terminal.collapseAria': '收起输出',
+        'terminal.expandAria': '展开其余 {n} 行',
+        'terminal.expandRest': '展开其余 {n} 行',
       },
     };
 
@@ -146,9 +203,10 @@ window.__ModuleLoader__.load({
       '.pa_recordTitle{text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:20px;overflow:hidden}',
       '.pa_recordDescription{text-overflow:ellipsis;white-space:nowrap;color:var(--dsw-alias-label-tertiary);font-size:10px;line-height:16px;overflow:hidden}',
       '.pa_recordOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}',
-      '.pa_pane{box-sizing:border-box;flex-direction:column;width:100%;height:100%;padding:12px 14px;display:flex;overflow:auto}',
+      '.pa_pane{box-sizing:border-box;flex:auto;flex-direction:column;width:100%;height:100%;min-height:0;padding:12px 14px;display:flex;overflow:auto}',
       '.pa_paneEmpty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;padding:8px 2px}',
-      '.pa_preview{box-sizing:border-box;flex-direction:column;gap:12px;width:100%;height:100%;padding:14px 16px;display:flex;overflow:auto}',
+      '.pa_preview{box-sizing:border-box;flex:auto;flex-direction:column;gap:12px;width:100%;height:100%;min-height:0;padding:14px 16px;display:flex;overflow:auto}',
+      '.pa_preview [data-terminal]{--dsl-terminal-command-whitespace:pre-wrap}',
       '.pa_previewStat{font-family:var(--ds-font-family-code);color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
       '.pa_code{--pa-code-fill:var(--dsw-static-neutral-50);background:var(--pa-code-fill);border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);margin:0;padding:10px 12px;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre;overflow:auto}',
       'body[data-ds-dark-theme] .pa_code{--pa-code-fill:var(--dsw-static-neutral-850)}',
@@ -165,9 +223,9 @@ window.__ModuleLoader__.load({
       '.pa_detail{flex-direction:column;gap:4px;display:flex}',
       '.pa_detailSection{flex-direction:column;gap:2px;display:flex}',
       '.pa_detailLabel{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code);font-size:11px;line-height:16px}',
-      '.pa_detailKey{color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);font-size:13px;line-height:20px}',
-      '.pa_detailPath{color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);font-size:13px;line-height:20px;word-break:break-all}',
-      '.pa_detailLink{color:var(--dsw-alias-label-primary);cursor:pointer;background:0 0;border:0;align-items:center;align-self:flex-end;gap:2px;margin-top:2px;padding:0;font-family:inherit;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}',
+      '.pa_detailKey{color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:15px;line-height:24px}',
+      '.pa_detailPath{color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:15px;line-height:24px;word-break:break-all}',
+      '.pa_detailLink{color:var(--dsw-alias-button-info-fill);cursor:pointer;background:0 0;border:0;align-items:center;gap:2px;margin-left:8px;padding:0;font-family:var(--dsw-font-family);font-size:15px;font-weight:400;line-height:24px;vertical-align:baseline;display:inline-flex}',
       '.pa_detailLink:hover{text-decoration:underline}',
       '.pa_detailLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
       '.pa_detailCode{max-height:54px;margin:0;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-word;overflow:auto}',
@@ -630,23 +688,23 @@ window.__ModuleLoader__.load({
       if (args === null || typeof args !== 'object') return [];
       const sections = [];
       if (typeof args.command === 'string') {
-        sections.push({ label: 'command', text: clipText(args.command) });
-        const cwd = typeof args.cwd === 'string' ? args.cwd : typeof call.cwd === 'string' ? call.cwd : undefined;
-        if (cwd !== undefined && cwd !== '') sections.push({ label: 'cwd', text: cwd });
+        const cwd = typeof args.cwd === 'string' ? args.cwd : typeof call.cwd === 'string' && call.cwd !== '' ? call.cwd : undefined;
+        sections.push({ label: 'command', text: args.command, ...(cwd === undefined ? {} : { cwd }) });
+        if (cwd !== undefined) sections.push({ label: 'cwd', text: cwd });
         return sections;
       }
       const path = typeof args.path === 'string' ? args.path : typeof args.file_path === 'string' ? args.file_path : undefined;
       if (path !== undefined && path !== '') sections.push({ label: 'filePath', text: path });
       if (typeof args.content === 'string') {
-        sections.push({ label: 'content', text: clipText(args.content) });
+        sections.push({ label: 'content', text: clipText(args.content, 4000, 200000) });
         return sections;
       }
       if (typeof args.old_string === 'string' || typeof args.new_string === 'string') {
-        const removed = typeof args.old_string === 'string' ? args.old_string.split('\n').slice(0, 40) : [];
-        const added = typeof args.new_string === 'string' ? args.new_string.split('\n').slice(0, 40) : [];
         sections.push({
           label: 'diff',
-          lines: [...removed.map((line) => ({ mark: '-', line })), ...added.map((line) => ({ mark: '+', line }))],
+          path: path ?? '',
+          oldText: typeof args.old_string === 'string' ? args.old_string : null,
+          newText: typeof args.new_string === 'string' ? args.new_string : '',
         });
         return sections;
       }
@@ -654,29 +712,68 @@ window.__ModuleLoader__.load({
       return [{ label: 'arguments', text: clipText(JSON.stringify(args, null, 2), 40, 4000) }];
     }
 
-    /** The one line that locates the action: its file path, else its working directory. */
+    /**
+     * The one line that locates the action: its file path when the call names
+     * one, otherwise its working directory. Both answer the same question —
+     * where this happens — and differ only in precision.
+     */
     function anchorSection(sections) {
       return sections.find((section) => section.label === 'filePath') ?? sections.find((section) => section.label === 'cwd');
     }
 
+    /** One recorded call's argument view as a plain object, for the shared preview. */
+    function readArguments(view) {
+      if (view === null || typeof view !== 'object') return undefined;
+      if (typeof view.keys !== 'function' || typeof view.text !== 'function') return view;
+      const out = {};
+      for (const key of view.keys()) {
+        const text = view.text(key);
+        if (text !== undefined) {
+          out[key] = text;
+          continue;
+        }
+        const value = typeof view.value === 'function' ? view.value(key) : undefined;
+        if (value !== undefined) out[key] = value;
+      }
+      return out;
+    }
+
+    /** The loaded Chat node of one call, when the transcript still holds it. */
+    function chatCallOf(nodes, callId) {
+      for (const node of nodes.values()) {
+        if (node === null || node.kind !== 'tool-call') continue;
+        const root = node.data === undefined ? undefined : node.data.root;
+        if (root === undefined || String(root.callId) !== callId) continue;
+        return root;
+      }
+      return undefined;
+    }
+
     /**
-     * The approval card's detail: the pending call's own arguments, fetched by
-     * call identity so the preview never depends on what the transcript window
-     * happens to hold or on the model presenting the work first.
+     * The approval card's detail: the pending call's own arguments.
      *
-     * @param props - approval identity and the owning Session.
-     * @returns the preview, or nothing when the call carries nothing to show.
+     * The loaded Chat node answers first, so the card paints without a round
+     * trip and a failed request leaves that copy in place instead of blanking
+     * the card; the Host route replaces it when it arrives, because the Chat
+     * window only materializes the events it loaded while the route reads the
+     * Session's whole log.
+     *
+     * @param props - approval identity, the owning Session, and the Chat hook.
+     * @returns the preview, or nothing when no source can name the call.
      */
-    function ApprovalDetail({ callId, sessionId, openPreview, t }) {
-      const [call, setCall] = React.useState(null);
+    function ApprovalDetail({ callId, sessionId, useChat, openPreview, t }) {
+      const chatCall = useChat((snapshot) => chatCallOf(snapshot.nodes, callId));
+      const chatArgs = React.useMemo(() => (chatCall === undefined ? undefined : readArguments(chatCall.args)), [chatCall]);
+      const [fetched, setFetched] = React.useState(null);
       React.useEffect(() => {
         let live = true;
-        setCall(null);
+        setFetched(null);
         fetch(`api/present-artefact/call?sessionId=${encodeURIComponent(sessionId)}&callId=${encodeURIComponent(callId)}`)
           .then(async (response) => {
             const value = await response.json().catch(() => ({}));
             if (!response.ok || value.ok !== true || !live) return;
-            setCall({ name: value.name, cwd: value.cwd, args: value.args ?? null });
+            if (value.args === null || typeof value.args !== 'object') return;
+            setFetched({ name: value.name, ...(value.cwd === undefined ? {} : { cwd: value.cwd }), args: value.args });
           })
           .catch(() => {});
         return () => {
@@ -684,25 +781,30 @@ window.__ModuleLoader__.load({
         };
       }, [sessionId, callId]);
 
+      const call = fetched ?? (chatCall !== undefined && chatArgs !== undefined ? { name: chatCall.name, args: chatArgs } : null);
       if (call === null) return null;
       const sections = callPreview(call);
-      const anchor = anchorSection(sections);
       if (sections.length === 0) return null;
+      const anchor = anchorSection(sections);
       const label = anchor === undefined ? null : t(`label.${anchor.label}`);
       return h(
         'div',
         { className: 'pa_detail', 'data-approval-preview': call.name },
-        anchor === undefined ? null : h('div', { className: 'pa_detailKey' }, `${label}:`),
-        anchor === undefined ? null : h('div', { className: 'pa_detailPath' }, anchor.text),
         h(
-          'button',
-          {
-            type: 'button',
-            className: 'pa_detailLink',
-            onClick: () => void openCallPreview(sessionId, callId, openPreview),
-          },
-          t('full'),
-          h(IconChevronRightOutlineRegular, { size: 14 }),
+          'div',
+          { className: 'pa_detailPath' },
+          anchor === undefined ? null : h('span', { className: 'pa_detailKey' }, `${label}: `),
+          anchor === undefined ? null : anchor.text,
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'pa_detailLink',
+              onClick: () => void openCallPreview(sessionId, callId, openPreview),
+            },
+            t('full'),
+            h(IconChevronRightOutlineRegular, { size: 14 }),
+          ),
         ),
       );
     }
@@ -728,43 +830,76 @@ window.__ModuleLoader__.load({
       );
     }
 
-    /** Line numbers for one edited hunk, counted from the hunk's own start. */
-    function diffRows(section) {
-      let oldNo = 1;
-      let newNo = 1;
-      return section.lines.map((entry) => {
-        if (entry.mark === '-') return { mark: '-', text: entry.line, oldNo: oldNo++, newNo: undefined };
-        return { mark: '+', text: entry.line, oldNo: undefined, newNo: newNo++ };
-      });
+    /** The diff chrome, in this package's own dictionary. */
+    function diffLabels(t) {
+      return {
+        codeLabel: t('diff.codeLabel'),
+        wrapLabel: t('diff.wrap'),
+        unwrapLabel: t('diff.unwrap'),
+        copy: t('diff.copy'),
+        copied: t('diff.copied'),
+        collapse: t('diff.collapse'),
+        collapseAria: t('diff.collapseAria'),
+        expand: (count) => t('diff.expand', { count }),
+        expandAria: (count) => t('diff.expandAria', { count }),
+      };
     }
 
-    /** One labelled section of the preview, rendered as what it is. */
+    /** Chrome for one Markdown pane, in this package's own dictionary. */
+    function markdownLabels(t) {
+      return {
+        code: {
+          copyLabel: t('copy'),
+          copiedLabel: t('copied'),
+          toolbarLabels: { codeLabel: t('code.title'), wrapLabel: t('code.wrap'), unwrapLabel: t('code.unwrap') },
+        },
+        footnotes: t('markdown.footnotes'),
+      };
+    }
+
+    /** Chrome for one terminal block, in this package's own dictionary. */
+    function terminalLabels(t) {
+      return {
+        commandLine: (line) => t('terminal.commandLine', { n: line }),
+        signal: (signal) => t('terminal.signal', { signal }),
+        exitCode: (code) => t('terminal.exitCode', { code }),
+        noExitCode: t('terminal.noExitCode'),
+        running: t('terminal.running'),
+        failed: t('terminal.failed'),
+        done: t('terminal.done'),
+        copy: t('copy'),
+        copied: t('copied'),
+        noOutput: t('terminal.noOutput'),
+        collapseAria: t('terminal.collapseAria'),
+        collapse: t('collapse'),
+        expandAria: (hidden) => t('terminal.expandAria', { n: hidden }),
+        expand: (hidden) => t('terminal.expandRest', { n: hidden }),
+      };
+    }
+
+    /** One section of the preview, rendered by the shipped renderer for its kind. */
     function PreviewSection({ section, t }) {
-      const label = h('div', { className: 'pa_detailLabel' }, `${t(`label.${section.label}`)}:`);
-      if (section.lines !== undefined) {
-        const rows = diffRows(section);
-        return h(
-          'div',
-          { className: 'pa_detailSection' },
-          label,
-          h(
-            'div',
-            { className: 'pa_diff', 'data-diff': true },
-            rows.map((row, index) =>
-              h(
-                'div',
-                { key: index, className: row.mark === '-' ? 'pa_diffRow pa_diffDel' : 'pa_diffRow pa_diffAdd' },
-                h('span', { className: 'pa_diffNo' }, row.oldNo ?? ''),
-                h('span', { className: 'pa_diffNo' }, row.newNo ?? ''),
-                h('span', { className: 'pa_diffMark' }, row.mark),
-                h('span', { className: 'pa_diffText' }, row.text),
-              ),
-            ),
-          ),
-        );
+      if (section.label === 'diff') {
+        return h(DiffBlock, {
+          diffs: [{ path: section.path, oldText: section.oldText, newText: section.newText }],
+          labels: diffLabels(t),
+          maxLines: 40,
+        });
       }
-      const text = section.label === 'command' ? `$ ${section.text}` : section.text;
-      return h('div', { className: 'pa_detailSection' }, label, h('pre', { className: 'pa_code' }, text));
+      if (section.label === 'command') {
+        return h(TerminalBlock, {
+          command: section.text,
+          ...(section.cwd === undefined ? {} : { cwd: section.cwd }),
+          running: true,
+          labels: terminalLabels(t),
+          maxLines: 24,
+        });
+      }
+      if (section.label === 'content') {
+        return h('div', { className: 'pa_detailSection' }, h(MarkdownText, { text: section.text, labels: markdownLabels(t) }));
+      }
+      const label = h('div', { className: 'pa_detailLabel' }, `${t(`label.${section.label}`)}:`);
+      return h('div', { className: 'pa_detailSection' }, label, h('pre', { className: 'pa_code' }, section.text));
     }
 
     /**
