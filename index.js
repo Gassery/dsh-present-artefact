@@ -110,6 +110,15 @@ export function apply(ctx) {
 		},
 	}, 'present-artefact: answer route'));
 
+	// A rejection is a decision, not a prompt: the turn the user turned down ends
+	// there, so the model does not follow a refusal with an explanation nobody
+	// asked for, and the composer goes straight back to the user.
+	ctx.effect(() => ctx.on('approval/request', async (request, next) => {
+		const outcome = await next();
+		if (outcome === 'rejected') request.agent.cancel({ kind: 'user' }, { keepInbox: true });
+		return outcome;
+	}, { prepend: true }), 'present-artefact: stop the turn on a rejection');
+
 	// The Client cannot list every artefact from its transcript window: the Chat
 	// and Trajectory views only materialize the events they loaded. This route
 	// answers from the live Session's own log, so the list is complete however
