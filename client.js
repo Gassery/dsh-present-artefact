@@ -149,7 +149,6 @@ window.__ModuleLoader__.load({
       '.pa_pane{box-sizing:border-box;flex-direction:column;width:100%;height:100%;padding:12px 14px;display:flex;overflow:auto}',
       '.pa_paneEmpty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;padding:8px 2px}',
       '.pa_preview{box-sizing:border-box;flex-direction:column;gap:12px;width:100%;height:100%;padding:14px 16px;display:flex;overflow:auto}',
-      '.pa_previewPath{font-family:var(--ds-font-family-code);color:var(--dsw-alias-label-secondary);word-break:break-all;font-size:12px;line-height:18px}',
       '.pa_previewStat{font-family:var(--ds-font-family-code);color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
       '.pa_code{--pa-code-fill:var(--dsw-static-neutral-50);background:var(--pa-code-fill);border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);margin:0;padding:10px 12px;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre;overflow:auto}',
       'body[data-ds-dark-theme] .pa_code{--pa-code-fill:var(--dsw-static-neutral-850)}',
@@ -655,6 +654,11 @@ window.__ModuleLoader__.load({
       return [{ label: 'arguments', text: clipText(JSON.stringify(args, null, 2), 40, 4000) }];
     }
 
+    /** The one line that locates the action: its file path, else its working directory. */
+    function anchorSection(sections) {
+      return sections.find((section) => section.label === 'filePath') ?? sections.find((section) => section.label === 'cwd');
+    }
+
     /**
      * The approval card's detail: the pending call's own arguments, fetched by
      * call identity so the preview never depends on what the transcript window
@@ -682,8 +686,7 @@ window.__ModuleLoader__.load({
 
       if (call === null) return null;
       const sections = callPreview(call);
-      const anchor =
-        sections.find((section) => section.label === 'filePath') ?? sections.find((section) => section.label === 'cwd');
+      const anchor = anchorSection(sections);
       if (sections.length === 0) return null;
       const label = anchor === undefined ? null : t(`label.${anchor.label}`);
       return h(
@@ -792,12 +795,12 @@ window.__ModuleLoader__.load({
       if (call === null) return h('div', { className: 'pa_preview' }, h('p', { className: 'pa_paneEmpty' }, t('loading')));
       const sections = callPreview(call);
       if (sections.length === 0) return h('div', { className: 'pa_preview' }, h('p', { className: 'pa_paneEmpty' }, t('empty')));
-      const path = sections.find((section) => section.label === 'filePath');
-      const body = sections.filter((section) => section.label !== 'filePath');
+      const anchor = anchorSection(sections);
+      const body = sections.filter((section) => section !== anchor);
+      if (body.length === 0) return h('div', { className: 'pa_preview' }, h('p', { className: 'pa_paneEmpty' }, t('empty')));
       return h(
         'div',
         { className: 'pa_preview', 'data-preview-call': callId },
-        path === undefined ? null : h('div', { className: 'pa_previewPath' }, path.text),
         body.map((section, index) => h(PreviewSection, { key: `${section.label}${index}`, section, t })),
       );
     }
