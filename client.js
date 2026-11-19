@@ -566,7 +566,7 @@ window.__ModuleLoader__.load({
       if (typeof args.command === 'string') {
         return { path: typeof args.cwd === 'string' ? args.cwd : undefined, code: clipText(args.command) };
       }
-      const path = typeof args.path === 'string' ? args.path : undefined;
+      const path = typeof args.path === 'string' ? args.path : typeof args.file_path === 'string' ? args.file_path : undefined;
       if (typeof args.content === 'string') return { path, code: clipText(args.content) };
       if (typeof args.old_string === 'string' || typeof args.new_string === 'string') {
         const removed = typeof args.old_string === 'string' ? args.old_string.split('\n').slice(0, 40) : [];
