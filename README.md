@@ -54,8 +54,42 @@ change.
   parameters), the same `MarkdownText` pane `exit_plan_mode` uses. File
   artefacts open the shipped `dsh-resource://file/…` preview, which picks a
   renderer by extension.
-- **Answer** — `POST /api/present-artefact/answer`, one authenticated route that
-  settles the pending review by tool call identity.
+- **Sidebar** — two page types: the artefact list for the Session, and one
+  operation preview that renders a single tool call's arguments.
+- **Approval details** — the `conversation.approval.detail` occupant, shared by
+  every approval in the Session. See below.
+- **Answer** — `POST /api/present-artefact/answer` settles the pending review by
+  tool call identity. `GET /api/present-artefact/list` lists a Session's
+  artefacts and `GET /api/present-artefact/call` reads one call's arguments;
+  both read the Session's own log rather than the loaded transcript.
+
+## Approvals
+
+The detail seat serves every approval request in the Session, not only this
+tool's:
+
+- one locating line — the file path, or the working directory when the call
+  names no file — with a **View full text** link that follows the end of that
+  line, whether it ends the text or wraps it;
+- the loaded Chat node answers first, so the card paints without a round trip,
+  and the Host's session-log copy replaces it when the request lands; a failed
+  request leaves the Chat copy in place instead of blanking the card;
+- rejecting an approval ends the turn and keeps whatever the user already
+  typed, so a refusal is a decision rather than a new prompt to answer.
+
+## The operation preview
+
+One section per argument shape, each drawn by the shipped primitive for it:
+
+| Arguments | Section | Renderer |
+| --- | --- | --- |
+| `command` | command | `TerminalBlock`, with the working directory, wrapping long commands |
+| `file_path` + `content` | content | `MarkdownText` |
+| `file_path` + `old_string` / `new_string` | diff | `DiffBlock` |
+| anything else | arguments | plain code |
+
+The approval card keeps the locating line; the preview holds the substance, and
+scrolls as one pane when the content outgrows it.
 
 ## Development notes
 
