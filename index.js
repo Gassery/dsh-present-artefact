@@ -182,7 +182,12 @@ export function apply(ctx) {
 				} catch {
 					args = undefined;
 				}
-				return Response.json({ ok: true, name: event.data.name, ...(args === undefined ? {} : { args }) });
+				return Response.json({
+					ok: true,
+					name: event.data.name,
+					...(session.header.cwd === undefined ? {} : { cwd: session.header.cwd }),
+					...(args === undefined ? {} : { args }),
+				});
 			}
 			return Response.json({ ok: false, error: 'unknown-call' }, { status: 404 });
 		},

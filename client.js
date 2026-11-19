@@ -128,8 +128,9 @@ window.__ModuleLoader__.load({
       '.pa_recordOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}',
       '.pa_pane{box-sizing:border-box;flex-direction:column;width:100%;height:100%;padding:12px 14px;display:flex;overflow:auto}',
       '.pa_paneEmpty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;padding:8px 2px}',
-      '.pa_detail{flex-direction:column;gap:4px;display:flex}',
-      '.pa_detailPath{color:var(--dsw-alias-label-secondary);word-break:break-all;font-size:12px;line-height:18px}',
+      '.pa_detail{flex-direction:column;gap:6px;display:flex}',
+      '.pa_detailSection{flex-direction:column;gap:2px;display:flex}',
+      '.pa_detailLabel{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code);font-size:11px;line-height:16px}',
       '.pa_detailCode{max-height:200px;margin:0;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-word;overflow:auto}',
       '.pa_detailLine{display:block}',
       '.pa_detailDel{color:var(--dsw-alias-state-error-primary)}',
@@ -559,24 +560,37 @@ window.__ModuleLoader__.load({
       return lines.length > maxChars ? `${lines.slice(0, maxChars)}…` : lines;
     }
 
-    /** What one pending call will actually do, in the form the card can render. */
+    /**
+     * What one pending call will actually do, as labelled sections so the card
+     * never mixes a path with a payload.
+     */
     function callPreview(call) {
       const args = call.args;
-      if (args === null || typeof args !== 'object') return {};
+      if (args === null || typeof args !== 'object') return [];
+      const sections = [];
       if (typeof args.command === 'string') {
-        return { path: typeof args.cwd === 'string' ? args.cwd : undefined, code: clipText(args.command) };
+        sections.push({ label: 'command', text: clipText(args.command) });
+        const cwd = typeof args.cwd === 'string' ? args.cwd : typeof call.cwd === 'string' ? call.cwd : undefined;
+        if (cwd !== undefined && cwd !== '') sections.push({ label: 'cwd', text: cwd });
+        return sections;
       }
       const path = typeof args.path === 'string' ? args.path : typeof args.file_path === 'string' ? args.file_path : undefined;
-      if (typeof args.content === 'string') return { path, code: clipText(args.content) };
+      if (path !== undefined && path !== '') sections.push({ label: 'file-path', text: path });
+      if (typeof args.content === 'string') {
+        sections.push({ label: 'content', text: clipText(args.content) });
+        return sections;
+      }
       if (typeof args.old_string === 'string' || typeof args.new_string === 'string') {
         const removed = typeof args.old_string === 'string' ? args.old_string.split('\n').slice(0, 40) : [];
         const added = typeof args.new_string === 'string' ? args.new_string.split('\n').slice(0, 40) : [];
-        return {
-          path,
-          diff: [...removed.map((line) => ({ mark: '-', line })), ...added.map((line) => ({ mark: '+', line }))],
-        };
+        sections.push({
+          label: 'diff',
+          lines: [...removed.map((line) => ({ mark: '-', line })), ...added.map((line) => ({ mark: '+', line }))],
+        });
+        return sections;
       }
-      return { code: clipText(JSON.stringify(args, null, 2), 40, 4000) };
+      if (sections.length > 0) return sections;
+      return [{ label: 'arguments', text: clipText(JSON.stringify(args, null, 2), 40, 4000) }];
     }
 
     /**
@@ -596,7 +610,7 @@ window.__ModuleLoader__.load({
           .then(async (response) => {
             const value = await response.json().catch(() => ({}));
             if (!response.ok || value.ok !== true || !live) return;
-            setCall({ name: value.name, args: value.args ?? null });
+            setCall({ name: value.name, cwd: value.cwd, args: value.args ?? null });
           })
           .catch(() => {});
         return () => {
@@ -605,22 +619,28 @@ window.__ModuleLoader__.load({
       }, [sessionId, callId]);
 
       if (call === null) return null;
-      const preview = callPreview(call);
-      const children = [];
-      if (preview.path !== undefined && preview.path !== '') children.push(h('div', { className: 'pa_detailPath' }, preview.path));
-      if (preview.diff !== undefined) {
-        children.push(
+      const sections = callPreview(call);
+      if (sections.length === 0) return null;
+      return h(
+        'div',
+        { className: 'pa_detail', 'data-approval-preview': call.name },
+        sections.map((section, index) =>
           h(
-            'pre',
-            { className: 'pa_detailCode' },
-            preview.diff.map((entry, index) => h('span', { key: index, className: entry.mark === '-' ? 'pa_detailLine pa_detailDel' : 'pa_detailLine pa_detailAdd' }, `${entry.mark} ${entry.line}`)),
+            'div',
+            { className: 'pa_detailSection', key: `${section.label}${index}` },
+            h('div', { className: 'pa_detailLabel' }, `${section.label}:`),
+            section.lines !== undefined
+              ? h(
+                  'pre',
+                  { className: 'pa_detailCode' },
+                  section.lines.map((entry, line) =>
+                    h('span', { key: line, className: entry.mark === '-' ? 'pa_detailLine pa_detailDel' : 'pa_detailLine pa_detailAdd' }, `${entry.mark} ${entry.line}`),
+                  ),
+                )
+              : h('pre', { className: 'pa_detailCode' }, section.text),
           ),
-        );
-      } else if (preview.code !== undefined && preview.code !== '') {
-        children.push(h('pre', { className: 'pa_detailCode' }, preview.code));
-      }
-      if (children.length === 0) return null;
-      return h('div', { className: 'pa_detail', 'data-approval-preview': call.name }, children);
+        ),
+      );
     }
 
     /**
