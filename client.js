@@ -681,13 +681,15 @@ window.__ModuleLoader__.load({
 
       if (call === null) return null;
       const sections = callPreview(call);
-      const path = sections.find((section) => section.label === 'filePath');
+      const anchor =
+        sections.find((section) => section.label === 'filePath') ?? sections.find((section) => section.label === 'cwd');
       if (sections.length === 0) return null;
+      const label = anchor === undefined ? null : t(`label.${anchor.label}`);
       return h(
         'div',
         { className: 'pa_detail', 'data-approval-preview': call.name },
-        path === undefined ? null : h('div', { className: 'pa_detailLabel' }, `${t('label.filePath')}:`),
-        path === undefined ? null : h('div', { className: 'pa_detailPath' }, path.text),
+        anchor === undefined ? null : h('div', { className: 'pa_detailLabel' }, `${label}:`),
+        anchor === undefined ? null : h('div', { className: 'pa_detailPath' }, anchor.text),
         h(
           'button',
           {
