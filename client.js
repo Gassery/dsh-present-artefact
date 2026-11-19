@@ -128,6 +128,12 @@ window.__ModuleLoader__.load({
       '.pa_recordOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}',
       '.pa_pane{box-sizing:border-box;flex-direction:column;width:100%;height:100%;padding:12px 14px;display:flex;overflow:auto}',
       '.pa_paneEmpty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;padding:8px 2px}',
+      '.pa_detail{flex-direction:column;gap:4px;display:flex}',
+      '.pa_detailPath{color:var(--dsw-alias-label-secondary);word-break:break-all;font-size:12px;line-height:18px}',
+      '.pa_detailCode{max-height:200px;margin:0;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-word;overflow:auto}',
+      '.pa_detailLine{display:block}',
+      '.pa_detailDel{color:var(--dsw-alias-state-error-primary)}',
+      '.pa_detailAdd{color:var(--dsw-alias-label-primary)}',
     ].join('');
 
     const CSS_TAG_ID = 'dsh-present-artefact/PresentArtefact.module.css';
@@ -546,6 +552,77 @@ window.__ModuleLoader__.load({
       return h('span', null, t('tab'));
     }
 
+    /** Trim one excerpt so a huge payload cannot swamp the card. */
+    function clipText(text, maxLines = 60, maxChars = 6000) {
+      if (typeof text !== 'string') return '';
+      const lines = text.split('\n').slice(0, maxLines).join('\n');
+      return lines.length > maxChars ? `${lines.slice(0, maxChars)}…` : lines;
+    }
+
+    /** What one pending call will actually do, in the form the card can render. */
+    function callPreview(call) {
+      const args = call.args;
+      if (args === null || typeof args !== 'object') return {};
+      if (typeof args.command === 'string') {
+        return { path: typeof args.cwd === 'string' ? args.cwd : undefined, code: clipText(args.command) };
+      }
+      const path = typeof args.path === 'string' ? args.path : undefined;
+      if (typeof args.content === 'string') return { path, code: clipText(args.content) };
+      if (typeof args.old_string === 'string' || typeof args.new_string === 'string') {
+        const removed = typeof args.old_string === 'string' ? args.old_string.split('\n').slice(0, 40) : [];
+        const added = typeof args.new_string === 'string' ? args.new_string.split('\n').slice(0, 40) : [];
+        return {
+          path,
+          diff: [...removed.map((line) => ({ mark: '-', line })), ...added.map((line) => ({ mark: '+', line }))],
+        };
+      }
+      return { code: clipText(JSON.stringify(args, null, 2), 40, 4000) };
+    }
+
+    /**
+     * The approval card's detail: the pending call's own arguments, fetched by
+     * call identity so the preview never depends on what the transcript window
+     * happens to hold or on the model presenting the work first.
+     *
+     * @param props - approval identity and the owning Session.
+     * @returns the preview, or nothing when the call carries nothing to show.
+     */
+    function ApprovalDetail({ callId, sessionId }) {
+      const [call, setCall] = React.useState(null);
+      React.useEffect(() => {
+        let live = true;
+        setCall(null);
+        fetch(`api/present-artefact/call?sessionId=${encodeURIComponent(sessionId)}&callId=${encodeURIComponent(callId)}`)
+          .then(async (response) => {
+            const value = await response.json().catch(() => ({}));
+            if (!response.ok || value.ok !== true || !live) return;
+            setCall({ name: value.name, args: value.args ?? null });
+          })
+          .catch(() => {});
+        return () => {
+          live = false;
+        };
+      }, [sessionId, callId]);
+
+      if (call === null) return null;
+      const preview = callPreview(call);
+      const children = [];
+      if (preview.path !== undefined && preview.path !== '') children.push(h('div', { className: 'pa_detailPath' }, preview.path));
+      if (preview.diff !== undefined) {
+        children.push(
+          h(
+            'pre',
+            { className: 'pa_detailCode' },
+            preview.diff.map((entry, index) => h('span', { key: index, className: entry.mark === '-' ? 'pa_detailLine pa_detailDel' : 'pa_detailLine pa_detailAdd' }, `${entry.mark} ${entry.line}`)),
+          ),
+        );
+      } else if (preview.code !== undefined && preview.code !== '') {
+        children.push(h('pre', { className: 'pa_detailCode' }, preview.code));
+      }
+      if (children.length === 0) return null;
+      return h('div', { className: 'pa_detail', 'data-approval-preview': call.name }, children);
+    }
+
     /**
      * The transcript row: the pending state while the review is open, then the
      * recorded outcome over the settled artefact card.
@@ -640,6 +717,13 @@ window.__ModuleLoader__.load({
 
         ctx.slots.inject('tool.call.toolview', () =>
           ctx.slots.register({ name: 'tool.call.toolview', key: TOOL_NAME, locale: NS }, (props) => h(ArtefactRow, { ...props, openTab })),
+        );
+
+        // The shipped detail only reads `command` off the transcript window; this
+        // seat shows whatever the pending call itself carries, fetched from the
+        // Host by call identity.
+        ctx.slots.inject('conversation.approval.detail', () =>
+          ctx.slots.register({ name: 'conversation.approval.detail', priority: 1 }, (props) => h(ApprovalDetail, props)),
         );
       },
     };

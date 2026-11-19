@@ -25,6 +25,8 @@ const TOOL_NAME = 'present_artefact';
 const ANSWER_ROUTE = '/api/present-artefact/answer';
 /** The session artefact list route below `/api`. */
 const LIST_ROUTE = '/api/present-artefact/list';
+/** The single-call argument route below `/api`. */
+const CALL_ROUTE = '/api/present-artefact/call';
 
 /** Decisions as machine values; the card renders its own localized labels. */
 const AGREE = 'agree';
@@ -148,6 +150,34 @@ export function apply(ctx) {
 			return Response.json({ ok: true, entries });
 		},
 	}, 'present-artefact: list route'));
+
+	// One pending call's own arguments, so an approval card can show what the
+	// call will actually do without trusting the model to present it first.
+	ctx.effect(() => ctx.connection.fetch.register({
+		path: CALL_ROUTE,
+		methods: ['GET'],
+		requestBody: 'buffered',
+		fetch: async (request) => {
+			const query = new URL(request.url).searchParams;
+			const sessionId = query.get('sessionId') ?? '';
+			const callId = query.get('callId') ?? '';
+			if (sessionId === '' || callId === '') return Response.json({ ok: false, error: 'missing-identity' }, { status: 400 });
+			const sessions = ctx.get('sessions');
+			const session = sessions === undefined ? undefined : sessions.get(sessionId);
+			if (session === undefined) return Response.json({ ok: false, error: 'unknown-session' }, { status: 404 });
+			for (const event of session.snapshotEvents()) {
+				if (event.type !== 'tool/call' || String(event.data.callId) !== callId) continue;
+				let args;
+				try {
+					args = JSON.parse(event.data.arguments);
+				} catch {
+					args = undefined;
+				}
+				return Response.json({ ok: true, name: event.data.name, ...(args === undefined ? {} : { args }) });
+			}
+			return Response.json({ ok: false, error: 'unknown-call' }, { status: 404 });
+		},
+	}, 'present-artefact: call route'));
 
 	ctx.tools.register({
 		name: TOOL_NAME,
