@@ -410,12 +410,22 @@ window.__ModuleLoader__.load({
       return false;
     }
 
+    /** The fence language that makes each section read like what it is. */
+    function sectionFence(label) {
+      if (label === 'command') return 'bash';
+      if (label === 'diff') return 'diff';
+      if (label === 'arguments') return 'json';
+      return 'text';
+    }
+
     /** One call preview as markdown, for the sidebar's full-text pane. */
     function previewMarkdown(sections, t) {
       return sections
         .map((section) => {
+          const heading = `### ${t(`label.${section.label}`)}`;
+          if (section.label === 'cwd' || section.label === 'filePath') return `${heading}\n\n\`${section.text}\``;
           const body = section.lines !== undefined ? section.lines.map((line) => `${line.mark} ${line.line}`).join('\n') : section.text;
-          return `**${t(`label.${section.label}`)}**\n\n\`\`\`\n${body}\n\`\`\``;
+          return `${heading}\n\n\`\`\`${sectionFence(section.label)}\n${body}\n\`\`\``;
         })
         .join('\n\n');
     }
