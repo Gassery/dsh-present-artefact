@@ -65,6 +65,7 @@ window.__ModuleLoader__.load({
         loadFailed: 'Could not load the artefacts.',
         turn: 'Turn {turn}',
         step: 'Step {step}',
+        escalation: 'Escalation',
       },
       zh: {
         banner: '产物待审',
@@ -87,6 +88,7 @@ window.__ModuleLoader__.load({
         loadFailed: '无法加载产物列表。',
         turn: '第 {turn} 轮',
         step: '第 {step} 步',
+        escalation: '提权',
       },
     };
 
@@ -129,9 +131,10 @@ window.__ModuleLoader__.load({
       '.pa_pane{box-sizing:border-box;flex-direction:column;width:100%;height:100%;padding:12px 14px;display:flex;overflow:auto}',
       '.pa_paneEmpty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;padding:8px 2px}',
       '.pa_detail{flex-direction:column;gap:6px;display:flex}',
+      '.pa_detailHead{justify-content:flex-end;display:flex}',
       '.pa_detailSection{flex-direction:column;gap:2px;display:flex}',
       '.pa_detailLabel{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code);font-size:11px;line-height:16px}',
-      '.pa_detailCode{max-height:200px;margin:0;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-word;overflow:auto}',
+      '.pa_detailCode{max-height:54px;margin:0;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-word;overflow:auto}',
       '.pa_detailLine{display:block}',
       '.pa_detailDel{color:var(--dsw-alias-state-error-primary)}',
       '.pa_detailAdd{color:var(--dsw-alias-label-primary)}',
@@ -395,6 +398,33 @@ window.__ModuleLoader__.load({
       return false;
     }
 
+    /** One call preview as markdown, for the sidebar's full-text pane. */
+    function previewMarkdown(sections) {
+      return sections
+        .map((section) => {
+          const body = section.lines !== undefined ? section.lines.map((line) => `${line.mark} ${line.line}`).join('\n') : section.text;
+          return `**${section.label}**\n\n\`\`\`\n${body}\n\`\`\``;
+        })
+        .join('\n\n');
+    }
+
+    /**
+     * Open one pending call's full preview in the sidebar. The card keeps its
+     * three-line excerpt; this is the optional whole of it.
+     */
+    async function openCallPreview(sessionId, callId, openTab, title) {
+      try {
+        const response = await fetch(`api/present-artefact/call?sessionId=${encodeURIComponent(sessionId)}&callId=${encodeURIComponent(callId)}`);
+        const value = await response.json().catch(() => ({}));
+        if (!response.ok || value.ok !== true) return;
+        const sections = callPreview({ name: value.name, cwd: value.cwd, args: value.args ?? null });
+        if (sections.length === 0) return;
+        openTab(reviewAddress(sessionId, callId), { params: { planReview: { markdown: previewMarkdown(sections), title } } });
+      } catch {
+        // A missing preview is not worth an error banner over the decision.
+      }
+    }
+
     /** Last path segment of a `path` argument, for the icon and the type label. */
     function basenameOf(path) {
       const normalized = typeof path === 'string' ? path.replace(/\\/g, '/') : '';
@@ -452,7 +482,10 @@ window.__ModuleLoader__.load({
           className: 'pa_record',
           'data-artefact-card': entry.callId,
           'aria-label': `${t('banner')}: ${title}`,
-          onClick: () => openEntry(entry, sessionId, openTab, title),
+          onClick: () => {
+            if (entry.kind === 'approval') void openCallPreview(sessionId, entry.callId, openTab, title);
+            else openEntry(entry, sessionId, openTab, title);
+          },
         },
         h('span', { className: 'pa_recordIcon' }, h(FileTypeIcon, { kind, size: 20 })),
         h(
@@ -543,7 +576,16 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'pa_records' },
-          entries.map((entry) => h(ArtefactRecord, { key: entry.callId, entry, sessionId, t, openTab, meta: artefactMeta(entry, t) })),
+          entries.map((entry) =>
+            h(ArtefactRecord, {
+              key: entry.callId,
+              entry,
+              sessionId,
+              t,
+              openTab,
+              meta: entry.kind === 'approval' ? `${t('escalation')} · ${artefactMeta(entry, t)}` : artefactMeta(entry, t),
+            }),
+          ),
         ),
       );
     }
@@ -601,7 +643,7 @@ window.__ModuleLoader__.load({
      * @param props - approval identity and the owning Session.
      * @returns the preview, or nothing when the call carries nothing to show.
      */
-    function ApprovalDetail({ callId, sessionId }) {
+    function ApprovalDetail({ callId, sessionId, openTab, t }) {
       const [call, setCall] = React.useState(null);
       React.useEffect(() => {
         let live = true;
@@ -624,6 +666,20 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'pa_detail', 'data-approval-preview': call.name },
+        h(
+          'div',
+          { className: 'pa_detailHead' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'pa_reviewLink',
+              onClick: () => void openCallPreview(sessionId, callId, openTab, t('escalation')),
+            },
+            t('full'),
+            h(IconChevronRightOutlineRegular, { size: 14 }),
+          ),
+        ),
         sections.map((section, index) =>
           h(
             'div',
@@ -742,7 +798,7 @@ window.__ModuleLoader__.load({
         // A single seat renders its lowest-priority occupant; the shipped detail
         // takes 0, so this one asks for steeper precedence.
         ctx.slots.inject('conversation.approval.detail', () =>
-          ctx.slots.register({ name: 'conversation.approval.detail', priority: -1 }, (props) => h(ApprovalDetail, props)),
+          ctx.slots.register({ name: 'conversation.approval.detail', priority: -1 }, (props) => h(ApprovalDetail, { ...props, openTab, t })),
         );
       },
     };

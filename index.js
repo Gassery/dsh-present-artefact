@@ -134,7 +134,30 @@ export function apply(ctx) {
 			const session = sessions === undefined ? undefined : sessions.get(sessionId);
 			if (session === undefined) return Response.json({ ok: false, error: 'unknown-session' }, { status: 404 });
 			const entries = [];
+			let turn = 0;
+			let step = 0;
 			for (const event of session.snapshotEvents()) {
+				if (event.type === 'turn/start') {
+					turn = event.data.turn;
+					continue;
+				}
+				if (event.type === 'step/start') {
+					step = event.data.step;
+					continue;
+				}
+				if (event.type === 'approval/asked') {
+					if (event.data.callId === undefined) continue;
+					const reason = typeof event.data.reason === 'string' && event.data.reason !== '' ? event.data.reason : event.data.toolName;
+					entries.push({
+						kind: 'approval',
+						callId: String(event.data.callId),
+						turn,
+						step,
+						time: event.time,
+						title: reason,
+					});
+					continue;
+				}
 				if (event.type !== 'tool/call' || event.data.name !== TOOL_NAME) continue;
 				let args;
 				try {
