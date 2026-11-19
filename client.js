@@ -66,6 +66,12 @@ window.__ModuleLoader__.load({
         turn: 'Turn {turn}',
         step: 'Step {step}',
         escalation: 'Escalation',
+        'label.command': 'command',
+        'label.cwd': 'cwd',
+        'label.filePath': 'file-path',
+        'label.content': 'content',
+        'label.diff': 'diff',
+        'label.arguments': 'arguments',
       },
       zh: {
         banner: '产物待审',
@@ -89,6 +95,12 @@ window.__ModuleLoader__.load({
         turn: '第 {turn} 轮',
         step: '第 {step} 步',
         escalation: '提权',
+        'label.command': '命令',
+        'label.cwd': '工作目录',
+        'label.filePath': '文件路径',
+        'label.content': '内容',
+        'label.diff': '差异',
+        'label.arguments': '参数',
       },
     };
 
@@ -399,11 +411,11 @@ window.__ModuleLoader__.load({
     }
 
     /** One call preview as markdown, for the sidebar's full-text pane. */
-    function previewMarkdown(sections) {
+    function previewMarkdown(sections, t) {
       return sections
         .map((section) => {
           const body = section.lines !== undefined ? section.lines.map((line) => `${line.mark} ${line.line}`).join('\n') : section.text;
-          return `**${section.label}**\n\n\`\`\`\n${body}\n\`\`\``;
+          return `**${t(`label.${section.label}`)}**\n\n\`\`\`\n${body}\n\`\`\``;
         })
         .join('\n\n');
     }
@@ -412,14 +424,14 @@ window.__ModuleLoader__.load({
      * Open one pending call's full preview in the sidebar. The card keeps its
      * three-line excerpt; this is the optional whole of it.
      */
-    async function openCallPreview(sessionId, callId, openTab, title) {
+    async function openCallPreview(sessionId, callId, openTab, title, t) {
       try {
         const response = await fetch(`api/present-artefact/call?sessionId=${encodeURIComponent(sessionId)}&callId=${encodeURIComponent(callId)}`);
         const value = await response.json().catch(() => ({}));
         if (!response.ok || value.ok !== true) return;
         const sections = callPreview({ name: value.name, cwd: value.cwd, args: value.args ?? null });
         if (sections.length === 0) return;
-        openTab(reviewAddress(sessionId, callId), { params: { planReview: { markdown: previewMarkdown(sections), title } } });
+        openTab(reviewAddress(sessionId, callId), { params: { planReview: { markdown: previewMarkdown(sections, t), title } } });
       } catch {
         // A missing preview is not worth an error banner over the decision.
       }
@@ -483,7 +495,7 @@ window.__ModuleLoader__.load({
           'data-artefact-card': entry.callId,
           'aria-label': `${t('banner')}: ${title}`,
           onClick: () => {
-            if (entry.kind === 'approval') void openCallPreview(sessionId, entry.callId, openTab, title);
+            if (entry.kind === 'approval') void openCallPreview(sessionId, entry.callId, openTab, title, t);
             else openEntry(entry, sessionId, openTab, title);
           },
         },
@@ -617,7 +629,7 @@ window.__ModuleLoader__.load({
         return sections;
       }
       const path = typeof args.path === 'string' ? args.path : typeof args.file_path === 'string' ? args.file_path : undefined;
-      if (path !== undefined && path !== '') sections.push({ label: 'file-path', text: path });
+      if (path !== undefined && path !== '') sections.push({ label: 'filePath', text: path });
       if (typeof args.content === 'string') {
         sections.push({ label: 'content', text: clipText(args.content) });
         return sections;
@@ -674,7 +686,7 @@ window.__ModuleLoader__.load({
             {
               type: 'button',
               className: 'pa_reviewLink',
-              onClick: () => void openCallPreview(sessionId, callId, openTab, t('escalation')),
+              onClick: () => void openCallPreview(sessionId, callId, openTab, t('escalation'), t),
             },
             t('full'),
             h(IconChevronRightOutlineRegular, { size: 14 }),
@@ -684,7 +696,7 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'pa_detailSection', key: `${section.label}${index}` },
-            h('div', { className: 'pa_detailLabel' }, `${section.label}:`),
+            h('div', { className: 'pa_detailLabel' }, `${t(`label.${section.label}`)}:`),
             section.lines !== undefined
               ? h(
                   'pre',
