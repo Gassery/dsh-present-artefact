@@ -42,6 +42,10 @@ window.__ModuleLoader__.load({
     const KIND = 'artefact-review';
     /** The right sidebar tab type: its guide card, its pane, and its title. */
     const TAB_ID = 'dsh-present-artefact';
+    /** The tab type that renders one pending call's full preview. */
+    const PREVIEW_ID = 'dsh-present-artefact/preview';
+    /** The call the newest preview tab opened for, when the tab carries no params. */
+    let lastPreviewCallId = '';
 
     const DICT = {
       en: {
@@ -66,6 +70,7 @@ window.__ModuleLoader__.load({
         turn: 'Turn {turn}',
         step: 'Step {step}',
         escalation: 'Escalation',
+        previewTab: 'Operation preview',
         'label.command': 'command',
         'label.cwd': 'cwd',
         'label.filePath': 'file-path',
@@ -95,6 +100,7 @@ window.__ModuleLoader__.load({
         turn: '第 {turn} 轮',
         step: '第 {step} 步',
         escalation: '提权',
+        previewTab: '操作预览',
         'label.command': '命令',
         'label.cwd': '工作目录',
         'label.filePath': '文件路径',
@@ -142,6 +148,21 @@ window.__ModuleLoader__.load({
       '.pa_recordOpen{box-sizing:border-box;border:.5px solid var(--dsw-alias-border-l3);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-button-floating-fill);flex:none;align-items:center;height:28px;padding:4px 8px;font-size:12px;line-height:18px;display:inline-flex}',
       '.pa_pane{box-sizing:border-box;flex-direction:column;width:100%;height:100%;padding:12px 14px;display:flex;overflow:auto}',
       '.pa_paneEmpty{margin:0;color:var(--dsw-alias-label-tertiary);font-size:13px;line-height:20px;padding:8px 2px}',
+      '.pa_preview{box-sizing:border-box;flex-direction:column;gap:12px;width:100%;height:100%;padding:14px 16px;display:flex;overflow:auto}',
+      '.pa_previewPath{font-family:var(--ds-font-family-code);color:var(--dsw-alias-label-secondary);word-break:break-all;font-size:12px;line-height:18px}',
+      '.pa_previewStat{font-family:var(--ds-font-family-code);color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px}',
+      '.pa_code{--pa-code-fill:var(--dsw-static-neutral-50);background:var(--pa-code-fill);border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);margin:0;padding:10px 12px;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre;overflow:auto}',
+      'body[data-ds-dark-theme] .pa_code{--pa-code-fill:var(--dsw-static-neutral-850)}',
+      '.pa_diff{--pa-code-fill:var(--dsw-static-neutral-50);background:var(--pa-code-fill);border:.5px solid var(--dsw-alias-border-l1);border-radius:var(--dsw-radius-lg);font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;overflow:auto}',
+      'body[data-ds-dark-theme] .pa_diff{--pa-code-fill:var(--dsw-static-neutral-850)}',
+      '.pa_diffRow{display:flex;min-width:max-content;white-space:pre}',
+      '.pa_diffNo{flex:none;width:46px;color:var(--dsw-alias-label-tertiary);text-align:right;padding-right:10px;user-select:none}',
+      '.pa_diffMark{flex:none;width:18px;text-align:center;color:var(--dsw-alias-label-tertiary)}',
+      '.pa_diffText{padding-right:14px}',
+      '.pa_diffDel{background:color-mix(in srgb, var(--dsw-alias-state-error-primary) 14%, transparent)}',
+      '.pa_diffDel .pa_diffMark{color:var(--dsw-alias-state-error-primary)}',
+      '.pa_diffAdd{background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}',
+      '.pa_diffAdd .pa_diffMark{color:var(--dsw-alias-state-success-primary)}',
       '.pa_detail{flex-direction:column;gap:6px;display:flex}',
       '.pa_detailHead{justify-content:flex-end;display:flex}',
       '.pa_detailSection{flex-direction:column;gap:2px;display:flex}',
@@ -410,41 +431,13 @@ window.__ModuleLoader__.load({
       return false;
     }
 
-    /** The fence language that makes each section read like what it is. */
-    function sectionFence(label) {
-      if (label === 'command') return 'bash';
-      if (label === 'diff') return 'diff';
-      if (label === 'arguments') return 'json';
-      return 'text';
-    }
-
-    /** One call preview as markdown, for the sidebar's full-text pane. */
-    function previewMarkdown(sections, t) {
-      return sections
-        .map((section) => {
-          const heading = `### ${t(`label.${section.label}`)}`;
-          if (section.label === 'cwd' || section.label === 'filePath') return `${heading}\n\n\`${section.text}\``;
-          const body = section.lines !== undefined ? section.lines.map((line) => `${line.mark} ${line.line}`).join('\n') : section.text;
-          return `${heading}\n\n\`\`\`${sectionFence(section.label)}\n${body}\n\`\`\``;
-        })
-        .join('\n\n');
-    }
-
     /**
-     * Open one pending call's full preview in the sidebar. The card keeps its
-     * three-line excerpt; this is the optional whole of it.
+     * Open one pending call's full preview in our own sidebar tab, where each
+     * section gets a renderer of its own.
      */
-    async function openCallPreview(sessionId, callId, openTab, title, t) {
-      try {
-        const response = await fetch(`api/present-artefact/call?sessionId=${encodeURIComponent(sessionId)}&callId=${encodeURIComponent(callId)}`);
-        const value = await response.json().catch(() => ({}));
-        if (!response.ok || value.ok !== true) return;
-        const sections = callPreview({ name: value.name, cwd: value.cwd, args: value.args ?? null });
-        if (sections.length === 0) return;
-        openTab(reviewAddress(sessionId, callId), { params: { planReview: { markdown: previewMarkdown(sections, t), title } } });
-      } catch {
-        // A missing preview is not worth an error banner over the decision.
-      }
+    function openCallPreview(sessionId, callId, openPreview) {
+      lastPreviewCallId = callId;
+      openPreview(callId);
     }
 
     /** Last path segment of a `path` argument, for the icon and the type label. */
@@ -492,7 +485,7 @@ window.__ModuleLoader__.load({
      * @param props - the collected artefact, its Session, and navigation.
      * @returns the row button.
      */
-    function ArtefactRecord({ entry, sessionId, t, openTab, meta }) {
+    function ArtefactRecord({ entry, sessionId, t, openTab, openPreview, meta }) {
       const hasBody = typeof entry.body === 'string' && entry.body !== '';
       const name = hasBody ? '' : basenameOf(entry.path);
       const kind = hasBody ? 'markdown' : classifyFileType(name);
@@ -505,7 +498,7 @@ window.__ModuleLoader__.load({
           'data-artefact-card': entry.callId,
           'aria-label': `${t('banner')}: ${title}`,
           onClick: () => {
-            if (entry.kind === 'approval') void openCallPreview(sessionId, entry.callId, openTab, title, t);
+            if (entry.kind === 'approval') void openCallPreview(sessionId, entry.callId, openPreview);
             else openEntry(entry, sessionId, openTab, title);
           },
         },
@@ -544,7 +537,7 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'pa_records', 'data-artefact-cards': true },
-        h(ArtefactRecord, { entry, sessionId, t, openTab, meta: `${t('artefact')} · ${hasBody ? 'Markdown' : typeLabelOf(basenameOf(path), t)}` }),
+        h(ArtefactRecord, { entry, sessionId, t, openTab, openPreview, meta: `${t('artefact')} · ${hasBody ? 'Markdown' : typeLabelOf(basenameOf(path), t)}` }),
       );
     }
 
@@ -555,7 +548,7 @@ window.__ModuleLoader__.load({
      * @param props - tab slot props: `sessionId`, `useChat`, translator, navigation.
      * @returns the list, or its empty state.
      */
-    function ArtefactPane({ sessionId, useChat, t, openTab }) {
+    function ArtefactPane({ sessionId, useChat, t, openTab, openPreview }) {
       const [entries, setEntries] = React.useState(null);
       const [failed, setFailed] = React.useState(false);
       const [detail, setDetail] = React.useState('');
@@ -605,6 +598,7 @@ window.__ModuleLoader__.load({
               sessionId,
               t,
               openTab,
+              openPreview,
               meta: entry.kind === 'approval' ? `${t('escalation')} · ${artefactMeta(entry, t)}` : artefactMeta(entry, t),
             }),
           ),
@@ -665,7 +659,7 @@ window.__ModuleLoader__.load({
      * @param props - approval identity and the owning Session.
      * @returns the preview, or nothing when the call carries nothing to show.
      */
-    function ApprovalDetail({ callId, sessionId, openTab, t }) {
+    function ApprovalDetail({ callId, sessionId, openPreview, t }) {
       const [call, setCall] = React.useState(null);
       React.useEffect(() => {
         let live = true;
@@ -684,6 +678,7 @@ window.__ModuleLoader__.load({
 
       if (call === null) return null;
       const sections = callPreview(call);
+      const path = sections.find((section) => section.label === 'filePath');
       if (sections.length === 0) return null;
       return h(
         'div',
@@ -696,28 +691,14 @@ window.__ModuleLoader__.load({
             {
               type: 'button',
               className: 'pa_reviewLink',
-              onClick: () => void openCallPreview(sessionId, callId, openTab, t('escalation'), t),
+              onClick: () => void openCallPreview(sessionId, callId, openPreview),
             },
             t('full'),
             h(IconChevronRightOutlineRegular, { size: 14 }),
           ),
         ),
-        sections.map((section, index) =>
-          h(
-            'div',
-            { className: 'pa_detailSection', key: `${section.label}${index}` },
-            h('div', { className: 'pa_detailLabel' }, `${t(`label.${section.label}`)}:`),
-            section.lines !== undefined
-              ? h(
-                  'pre',
-                  { className: 'pa_detailCode' },
-                  section.lines.map((entry, line) =>
-                    h('span', { key: line, className: entry.mark === '-' ? 'pa_detailLine pa_detailDel' : 'pa_detailLine pa_detailAdd' }, `${entry.mark} ${entry.line}`),
-                  ),
-                )
-              : h('pre', { className: 'pa_detailCode' }, section.text),
-          ),
-        ),
+        path === undefined ? null : h('div', { className: 'pa_detailLabel' }, `${t('label.filePath')}:`),
+        path === undefined ? null : h('div', { className: 'pa_previewPath' }, path.text),
       );
     }
 
@@ -742,6 +723,88 @@ window.__ModuleLoader__.load({
       );
     }
 
+    /** Line numbers for one edited hunk, counted from the hunk's own start. */
+    function diffRows(section) {
+      let oldNo = 1;
+      let newNo = 1;
+      return section.lines.map((entry) => {
+        if (entry.mark === '-') return { mark: '-', text: entry.line, oldNo: oldNo++, newNo: undefined };
+        return { mark: '+', text: entry.line, oldNo: undefined, newNo: newNo++ };
+      });
+    }
+
+    /** One labelled section of the preview, rendered as what it is. */
+    function PreviewSection({ section, t }) {
+      const label = h('div', { className: 'pa_detailLabel' }, `${t(`label.${section.label}`)}:`);
+      if (section.lines !== undefined) {
+        const rows = diffRows(section);
+        return h(
+          'div',
+          { className: 'pa_detailSection' },
+          label,
+          h(
+            'div',
+            { className: 'pa_diff', 'data-diff': true },
+            rows.map((row, index) =>
+              h(
+                'div',
+                { key: index, className: row.mark === '-' ? 'pa_diffRow pa_diffDel' : 'pa_diffRow pa_diffAdd' },
+                h('span', { className: 'pa_diffNo' }, row.oldNo ?? ''),
+                h('span', { className: 'pa_diffNo' }, row.newNo ?? ''),
+                h('span', { className: 'pa_diffMark' }, row.mark),
+                h('span', { className: 'pa_diffText' }, row.text),
+              ),
+            ),
+          ),
+        );
+      }
+      const text = section.label === 'command' ? `$ ${section.text}` : section.text;
+      return h('div', { className: 'pa_detailSection' }, label, h('pre', { className: 'pa_code' }, text));
+    }
+
+    /**
+     * The dedicated sidebar pane for one pending call: the card keeps the path,
+     * this shows the substance with a renderer per section.
+     */
+    function PreviewPane({ sessionId, useTabInfo, t }) {
+      const info = typeof useTabInfo === 'function' ? useTabInfo() : undefined;
+      const callId = info?.tab?.params?.callId ?? lastPreviewCallId;
+      const [call, setCall] = React.useState(null);
+
+      React.useEffect(() => {
+        if (callId === '') return undefined;
+        let live = true;
+        setCall(null);
+        fetch(`api/present-artefact/call?sessionId=${encodeURIComponent(sessionId)}&callId=${encodeURIComponent(callId)}`)
+          .then(async (response) => {
+            const value = await response.json().catch(() => ({}));
+            if (!response.ok || value.ok !== true || !live) return;
+            setCall({ name: value.name, cwd: value.cwd, args: value.args ?? null });
+          })
+          .catch(() => {});
+        return () => {
+          live = false;
+        };
+      }, [sessionId, callId]);
+
+      if (call === null) return h('div', { className: 'pa_preview' }, h('p', { className: 'pa_paneEmpty' }, t('loading')));
+      const sections = callPreview(call);
+      if (sections.length === 0) return h('div', { className: 'pa_preview' }, h('p', { className: 'pa_paneEmpty' }, t('empty')));
+      const path = sections.find((section) => section.label === 'filePath');
+      const body = sections.filter((section) => section.label !== 'filePath');
+      return h(
+        'div',
+        { className: 'pa_preview', 'data-preview-call': callId },
+        path === undefined ? null : h('div', { className: 'pa_previewPath' }, path.text),
+        body.map((section, index) => h(PreviewSection, { key: `${section.label}${index}`, section, t })),
+      );
+    }
+
+    /** The preview tab chip's title. */
+    function PreviewPaneTitle({ t }) {
+      return h('span', null, t('previewTab'));
+    }
+
     return {
       inject: ['slots', 'locale', 'sidebarRight', 'uiSession'],
       apply(ctx) {
@@ -755,6 +818,7 @@ window.__ModuleLoader__.load({
         }, 'present-artefact: dictionaries');
         const t = ctx.locale.bind(NS);
         const openTab = (address, options) => ctx.sidebarRight.openResource(address, options);
+        const openPreview = (callId) => ctx.sidebarRight.openTab(PREVIEW_ID, { params: { callId } });
 
         // The right sidebar carries the artefact list: one tab type whose guide
         // card is the entry and whose pane is the history. The transcript stays
@@ -778,10 +842,21 @@ window.__ModuleLoader__.load({
                 ],
               }),
               actx.slots.inject('sidebar.right.pane.tab', () =>
-                actx.slots.register({ name: 'sidebar.right.pane.tab', key: TAB_ID, locale: NS }, (props) => h(ArtefactPane, { ...props, openTab, t })),
+                actx.slots.register({ name: 'sidebar.right.pane.tab', key: TAB_ID, locale: NS }, (props) => h(ArtefactPane, { ...props, openTab, openPreview, t })),
               ),
               actx.slots.inject('sidebar.right.pane.tab.title', () =>
                 actx.slots.register({ name: 'sidebar.right.pane.tab.title', key: TAB_ID, locale: NS }, (props) => h(ArtefactPaneTitle, { ...props, t })),
+              ),
+              actx.sidebarRightTabs.register({
+                id: PREVIEW_ID,
+                kind: PREVIEW_ID,
+                title: () => t('previewTab'),
+              }),
+              actx.slots.inject('sidebar.right.pane.tab', () =>
+                actx.slots.register({ name: 'sidebar.right.pane.tab', key: PREVIEW_ID, locale: NS }, (props) => h(PreviewPane, { ...props, t })),
+              ),
+              actx.slots.inject('sidebar.right.pane.tab.title', () =>
+                actx.slots.register({ name: 'sidebar.right.pane.tab.title', key: PREVIEW_ID, locale: NS }, (props) => h(PreviewPaneTitle, { ...props, t })),
               ),
             ];
             return () => {
@@ -820,7 +895,7 @@ window.__ModuleLoader__.load({
         // A single seat renders its lowest-priority occupant; the shipped detail
         // takes 0, so this one asks for steeper precedence.
         ctx.slots.inject('conversation.approval.detail', () =>
-          ctx.slots.register({ name: 'conversation.approval.detail', priority: -1 }, (props) => h(ApprovalDetail, { ...props, openTab, t })),
+          ctx.slots.register({ name: 'conversation.approval.detail', priority: -1 }, (props) => h(ApprovalDetail, { ...props, openPreview, t })),
         );
       },
     };
