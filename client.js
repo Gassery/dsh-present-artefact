@@ -166,9 +166,9 @@ window.__ModuleLoader__.load({
       '.pa_detail{flex-direction:column;gap:4px;display:flex}',
       '.pa_detailSection{flex-direction:column;gap:2px;display:flex}',
       '.pa_detailLabel{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code);font-size:11px;line-height:16px}',
-      '.pa_detailPath{color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);font-size:12px;font-weight:500;line-height:18px;word-break:break-all}',
-      '.pa_detailLink{color:var(--dsw-static-deepseek-500);cursor:pointer;background:0 0;border:0;align-items:center;align-self:flex-end;gap:2px;margin-top:2px;padding:0;font-family:inherit;font-size:13px;font-weight:500;line-height:20px;display:inline-flex}',
-      'body[data-ds-dark-theme] .pa_detailLink{color:var(--dsw-static-deepseek-450)}',
+      '.pa_detailKey{color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);font-size:13px;line-height:20px}',
+      '.pa_detailPath{color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);font-size:13px;line-height:20px;word-break:break-all}',
+      '.pa_detailLink{color:var(--dsw-alias-label-primary);cursor:pointer;background:0 0;border:0;align-items:center;align-self:flex-end;gap:2px;margin-top:2px;padding:0;font-family:inherit;font-size:13px;font-weight:400;line-height:20px;display:inline-flex}',
       '.pa_detailLink:hover{text-decoration:underline}',
       '.pa_detailLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
       '.pa_detailCode{max-height:54px;margin:0;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-word;overflow:auto}',
@@ -689,7 +689,7 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'pa_detail', 'data-approval-preview': call.name },
-        anchor === undefined ? null : h('div', { className: 'pa_detailLabel' }, `${label}:`),
+        anchor === undefined ? null : h('div', { className: 'pa_detailKey' }, `${label}:`),
         anchor === undefined ? null : h('div', { className: 'pa_detailPath' }, anchor.text),
         h(
           'button',
