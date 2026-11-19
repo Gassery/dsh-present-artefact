@@ -719,11 +719,10 @@ window.__ModuleLoader__.load({
           ctx.slots.register({ name: 'tool.call.toolview', key: TOOL_NAME, locale: NS }, (props) => h(ArtefactRow, { ...props, openTab })),
         );
 
-        // The shipped detail only reads `command` off the transcript window; this
-        // seat shows whatever the pending call itself carries, fetched from the
-        // Host by call identity.
+        // A single seat renders its lowest-priority occupant; the shipped detail
+        // takes 0, so this one asks for steeper precedence.
         ctx.slots.inject('conversation.approval.detail', () =>
-          ctx.slots.register({ name: 'conversation.approval.detail', priority: 1 }, (props) => h(ApprovalDetail, props)),
+          ctx.slots.register({ name: 'conversation.approval.detail', priority: -1 }, (props) => h(ApprovalDetail, props)),
         );
       },
     };
