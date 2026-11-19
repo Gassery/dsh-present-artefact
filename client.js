@@ -163,10 +163,13 @@ window.__ModuleLoader__.load({
       '.pa_diffDel .pa_diffMark{color:var(--dsw-alias-state-error-primary)}',
       '.pa_diffAdd{background:color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent)}',
       '.pa_diffAdd .pa_diffMark{color:var(--dsw-alias-state-success-primary)}',
-      '.pa_detail{flex-direction:column;gap:6px;display:flex}',
-      '.pa_detailHead{justify-content:flex-end;display:flex}',
+      '.pa_detail{flex-direction:column;gap:4px;display:flex}',
       '.pa_detailSection{flex-direction:column;gap:2px;display:flex}',
       '.pa_detailLabel{color:var(--dsw-alias-label-tertiary);font-family:var(--ds-font-family-code);font-size:11px;line-height:16px}',
+      '.pa_detailPath{color:var(--dsw-alias-label-primary);font-family:var(--ds-font-family-code);font-size:12px;font-weight:500;line-height:18px;word-break:break-all}',
+      '.pa_detailLink{color:var(--dsw-alias-state-business-primary);cursor:pointer;background:0 0;border:0;align-items:center;gap:2px;margin-top:2px;padding:0;font-family:inherit;font-size:12px;font-weight:500;line-height:18px;display:inline-flex}',
+      '.pa_detailLink:hover{text-decoration:underline}',
+      '.pa_detailLink:focus-visible{outline:var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}',
       '.pa_detailCode{max-height:54px;margin:0;font-family:var(--ds-font-family-code);font-size:12px;line-height:18px;white-space:pre-wrap;word-break:break-word;overflow:auto}',
       '.pa_detailLine{display:block}',
       '.pa_detailDel{color:var(--dsw-alias-state-error-primary)}',
@@ -683,22 +686,18 @@ window.__ModuleLoader__.load({
       return h(
         'div',
         { className: 'pa_detail', 'data-approval-preview': call.name },
-        h(
-          'div',
-          { className: 'pa_detailHead' },
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'pa_reviewLink',
-              onClick: () => void openCallPreview(sessionId, callId, openPreview),
-            },
-            t('full'),
-            h(IconChevronRightOutlineRegular, { size: 14 }),
-          ),
-        ),
         path === undefined ? null : h('div', { className: 'pa_detailLabel' }, `${t('label.filePath')}:`),
-        path === undefined ? null : h('div', { className: 'pa_previewPath' }, path.text),
+        path === undefined ? null : h('div', { className: 'pa_detailPath' }, path.text),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'pa_detailLink',
+            onClick: () => void openCallPreview(sessionId, callId, openPreview),
+          },
+          t('full'),
+          h(IconChevronRightOutlineRegular, { size: 14 }),
+        ),
       );
     }
 
